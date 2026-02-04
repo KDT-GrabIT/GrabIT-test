@@ -18,6 +18,7 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.gpu.GpuDelegate
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -35,6 +36,8 @@ class MainActivity : AppCompatActivity() {
 
     // AI 모델
     private var yoloxInterpreter: Interpreter? = null
+    // [추가] GPU 델리게이트 변수
+    private var gpuDelegate: GpuDelegate? = null
     private var handLandmarker: HandLandmarker? = null
 
     // FPS 측정
@@ -67,23 +70,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun initYOLOX() {
         try {
-            val modelFile = loadModelFile("yolox_int8.tflite")
-            val options = Interpreter.Options().apply {
-                setNumThreads(4)
-                // GPU 사용 시
-                // addDelegate(GpuDelegate())
+            // [파일명 확인] assets 폴더에 이 파일이 꼭 있어야 합니다.
+            val modelFilename = "yolox_nano_640_gpu_fp16.tflite"
+            val modelFile = loadModelFile(modelFilename)
+
+            val options = Interpreter.Options()
+
+            // 🚀 GPU 가속 활성화 (FP16 모델용)
+            try {
+                gpuDelegate = GpuDelegate()
+                options.addDelegate(gpuDelegate)
+                options.setAllowFp16PrecisionForFp32(true) // FP16 연산 허용
+
+                Log.d(TAG, "🚀 GPU 가속 켜짐 (FP16)")
+                runOnUiThread { binding.yoloxStatus.text = "📦 YOLOX: GPU (FP16)" }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ GPU 실패 -> CPU 전환", e)
+                options.setNumThreads(4)
+                gpuDelegate = null
+                runOnUiThread { binding.yoloxStatus.text = "📦 YOLOX: CPU" }
             }
+
             yoloxInterpreter = Interpreter(modelFile, options)
 
-            Log.d(TAG, "✓ YOLOX 모델 로드 성공")
-            runOnUiThread {
-                binding.yoloxStatus.text = "📦 YOLOX: Ready (INT8)"
-            }
         } catch (e: Exception) {
-            Log.e(TAG, "YOLOX 로드 실패", e)
-            runOnUiThread {
-                binding.yoloxStatus.text = "📦 YOLOX: Failed"
-            }
+            Log.e(TAG, "YOLOX 초기화 실패", e)
+            runOnUiThread { binding.yoloxStatus.text = "Error: Init Failed" }
         }
     }
 
@@ -205,20 +217,26 @@ class MainActivity : AppCompatActivity() {
         try {
             // 입력 크기 확인 (YOLOX-nano는 보통 416x416)
             val inputShape = yoloxInterpreter!!.getInputTensor(0).shape()
-            val inputSize = inputShape[1] // [1, 416, 416, 3]
+            val inputSize = inputShape[1]
 
-            // 전처리
+            // 전처리 (위에서 수정한 함수 사용)
             val resizedBitmap = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
             val inputBuffer = bitmapToByteBuffer(resizedBitmap, inputSize)
 
-            // 출력 버퍼 준비
-            val outputShape = yoloxInterpreter!!.getOutputTensor(0).shape()
-            val output = Array(1) { Array(outputShape[1]) { FloatArray(outputShape[2]) } }
+            // 출력 텐서 모양 확인
+            val outputTensor = yoloxInterpreter!!.getOutputTensor(0)
+            val outputShape = outputTensor.shape()
+            // 로그 확인 필수! -> Logcat에서 "Output Shape" 검색
+            // Log.d(TAG, "Output Shape: ${outputShape.contentToString()}")
 
-            // 추론
+            // 출력 버퍼 생성 (동적으로 크기 할당)
+            val output = Array(outputShape[0]) { Array(outputShape[1]) { FloatArray(outputShape[2]) } }
+
             yoloxInterpreter!!.run(inputBuffer, output)
 
-            // 후처리 (NMS 등)
+            // 후처리 (Shape에 따라 처리 방식이 다름)
+            // 만약 shape가 [1, 85, 8400]이면 transpose가 필요하지만,
+            // 보통 [1, 8400, 85]라고 가정하고 파싱합니다.
             return parseYOLOXOutput(output[0], bitmap.width, bitmap.height, inputSize)
 
         } catch (e: Exception) {
@@ -235,10 +253,13 @@ class MainActivity : AppCompatActivity() {
         bitmap.getPixels(pixels, 0, size, 0, 0, size, size)
 
         for (pixelValue in pixels) {
-            // INT8 양자화 모델이므로 0-255 범위 유지
-            buffer.putFloat(((pixelValue shr 16) and 0xFF).toFloat())
-            buffer.putFloat(((pixelValue shr 8) and 0xFF).toFloat())
-            buffer.putFloat((pixelValue and 0xFF).toFloat())
+            // [수정] FP16 모델은 0~255 값을 0.0~1.0으로 '정규화' 해줘야 합니다!
+            // 기존 코드: buffer.putFloat(...) -> 틀림
+            // 수정 코드: 255.0f로 나누기
+
+            buffer.putFloat(((pixelValue shr 16) and 0xFF) / 255.0f) // R
+            buffer.putFloat(((pixelValue shr 8) and 0xFF) / 255.0f)  // G
+            buffer.putFloat((pixelValue and 0xFF) / 255.0f)          // B
         }
 
         return buffer
@@ -357,7 +378,9 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
         yoloxInterpreter?.close()
+        gpuDelegate?.close()
         handLandmarker?.close()
+
     }
 
     companion object {
