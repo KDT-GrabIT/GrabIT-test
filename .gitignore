@@ -13,3 +13,19 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Python (YOLOX 변환 등)
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+.eggs/
+
+# 대용량 모델/export (필요 시 주석 해제)
+# *.pth
+# best_ckpt.pth
+# yolox_export.onnx
+# yolox_export.onnx.data
+# YOLOX/

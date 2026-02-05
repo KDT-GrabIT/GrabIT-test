@@ -78,6 +78,19 @@
             android:textColor="#FFAA00"
             android:textSize="14sp" />
 
+        <!-- YOLOX 디버깅: shape + 감지별 클래스/신뢰도/좌표 -->
+        <TextView
+            android:id="@+id/yoloxShapeDebug"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:maxLines="15"
+            android:scrollbars="vertical"
+            android:text=""
+            android:textColor="#AAAAAA"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
