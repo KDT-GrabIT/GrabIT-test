@@ -153,6 +153,8 @@ class MainActivity : AppCompatActivity() {
             // ImageAnalysis
             val imageAnalyzer = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // [필수] 밀리면 버리기
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
                 .also {
                     it.setAnalyzer(cameraExecutor, ImageAnalyzer())
@@ -232,11 +234,22 @@ class MainActivity : AppCompatActivity() {
             // 출력 버퍼 생성 (동적으로 크기 할당)
             val output = Array(outputShape[0]) { Array(outputShape[1]) { FloatArray(outputShape[2]) } }
 
-            yoloxInterpreter!!.run(inputBuffer, output)
+            try {
+                // [수정] 닫힌 인터프리터 실행 방지
+                if (yoloxInterpreter != null) {
+                    yoloxInterpreter!!.run(inputBuffer, output)
+                } else {
+                    return emptyList()
+                }
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "YOLOX 인터프리터가 이미 닫혔습니다. (앱 종료 중)")
+                return emptyList()
+            } catch (e: Exception) {
+                Log.e(TAG, "YOLOX 실행 중 오류 발생", e)
+                return emptyList()
+            }
 
-            // 후처리 (Shape에 따라 처리 방식이 다름)
-            // 만약 shape가 [1, 85, 8400]이면 transpose가 필요하지만,
-            // 보통 [1, 8400, 85]라고 가정하고 파싱합니다.
+            // 후처리
             return parseYOLOXOutput(output[0], bitmap.width, bitmap.height, inputSize)
 
         } catch (e: Exception) {
@@ -253,14 +266,21 @@ class MainActivity : AppCompatActivity() {
         bitmap.getPixels(pixels, 0, size, 0, 0, size, size)
 
         for (pixelValue in pixels) {
-            // [수정] FP16 모델은 0~255 값을 0.0~1.0으로 '정규화' 해줘야 합니다!
-            // 기존 코드: buffer.putFloat(...) -> 틀림
-            // 수정 코드: 255.0f로 나누기
+            val r = (pixelValue shr 16 and 0xFF).toFloat()
+            val g = (pixelValue shr 8 and 0xFF).toFloat()
+            val b = (pixelValue and 0xFF).toFloat()
 
-            buffer.putFloat(((pixelValue shr 16) and 0xFF) / 255.0f) // R
-            buffer.putFloat(((pixelValue shr 8) and 0xFF) / 255.0f)  // G
-            buffer.putFloat((pixelValue and 0xFF) / 255.0f)          // B
+            // [수정] 정규화 제거 및 RGB 순서 적용
+            // YOLOX 모델이 onnx2tf로 변환될 때 보통 정규화가 내장되거나 0-255 입력을 기대합니다.
+            // 기존: BGR + 정규화 -> 점수 0.00001 (실패)
+            // 변경: RGB + 0~255 범위 (나누기 X, 빼기 X)
+            buffer.putFloat((b - 103.53f) / 57.375f)
+            // G (Green)
+            buffer.putFloat((g - 116.28f) / 57.12f)
+            // R (Red)
+            buffer.putFloat((r - 123.675f) / 58.395f)
         }
+        buffer.rewind()
 
         return buffer
     }
@@ -272,7 +292,12 @@ class MainActivity : AppCompatActivity() {
         inputSize: Int
     ): List<OverlayView.DetectionBox> {
         val detections = mutableListOf<OverlayView.DetectionBox>()
-        val confidenceThreshold = 0.5f
+        val confidenceThreshold = 0.2f
+        if (output.isNotEmpty()) {
+            val firstBox = output[0]
+            Log.d(TAG, "Raw Output Sample: [${firstBox[0]}, ${firstBox[1]}, ${firstBox[2]}, ${firstBox[3]}, Obj:${firstBox[4]}]")
+        }
+        var detectedCount = 0
 
         // YOLOX 출력 파싱 (형식에 따라 다름)
         // 일반적으로: [num_boxes, 85] (x, y, w, h, objectness, class_scores...)
@@ -294,18 +319,21 @@ class MainActivity : AppCompatActivity() {
                 // 클래스 찾기
                 val classScores = box.sliceArray(5 until box.size)
                 val classId = classScores.indices.maxByOrNull { classScores[it] } ?: 0
-                val classConfidence = classScores[classId] * confidence
+                val finalScore = classScores[classId] * confidence
 
-                detections.add(
-                    OverlayView.DetectionBox(
-                        label = "Object_$classId",
-                        confidence = classConfidence,
-                        rect = android.graphics.RectF(left, top, right, bottom)
+                if (finalScore > confidenceThreshold) {
+                    detections.add(
+                        OverlayView.DetectionBox(
+                            label = "Class $classId", // 클래스 이름 매핑 전 임시 라벨
+                            confidence = finalScore,
+                            rect = android.graphics.RectF(left, top, right, bottom)
+                        )
                     )
-                )
+                    detectedCount++
+                }
             }
         }
-
+        Log.d(TAG, "최종 탐지된 개수: $detectedCount")
         return detections
     }
 
