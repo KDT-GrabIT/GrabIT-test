@@ -6,25 +6,41 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- 카메라 프리뷰 -->
+    <!-- 카메라 프리뷰 (초기에는 숨김, 버튼 클릭 시 표시) -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toTopOf="@id/statusPanel"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- 오버레이 캔버스 (박스, 손 그리기) -->
+    <!-- 오버레이 캔버스 (박스 그리기) -->
     <com.example.grabitTest.OverlayView
         android:id="@+id/overlayView"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:visibility="gone"
         app:layout_constraintTop_toTopOf="@id/previewView"
         app:layout_constraintBottom_toBottomOf="@id/previewView"
         app:layout_constraintStart_toStartOf="@id/previewView"
         app:layout_constraintEnd_toEndOf="@id/previewView" />
+
+    <!-- 탐색 시작 버튼 (초기 화면, 클릭 시 카메라 시작) -->
+    <Button
+        android:id="@+id/startSearchBtn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="탐색 시작"
+        android:textSize="24sp"
+        android:paddingHorizontal="48dp"
+        android:paddingVertical="24dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/statusPanel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- 하단 상태 패널 -->
     <LinearLayout
@@ -38,7 +54,36 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- FPS 표시 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="타겟: "
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <Spinner
+                android:id="@+id/targetSpinner"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minWidth="120dp" />
+
+            <Button
+                android:id="@+id/resetBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="다시 찾기"
+                android:visibility="gone"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
         <TextView
             android:id="@+id/fpsText"
             android:layout_width="wrap_content"
@@ -48,7 +93,6 @@
             android:textSize="14sp"
             android:fontFamily="monospace" />
 
-        <!-- YOLOX 상태 -->
         <TextView
             android:id="@+id/yoloxStatus"
             android:layout_width="wrap_content"
@@ -58,17 +102,15 @@
             android:textColor="#FFFFFF"
             android:textSize="16sp" />
 
-        <!-- Hands 상태 -->
         <TextView
             android:id="@+id/handsStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="🖐️ Hands: Waiting..."
+            android:text="📐 자이로: OFF"
             android:textColor="#FFFFFF"
             android:textSize="16sp" />
 
-        <!-- 추론 시간 -->
         <TextView
             android:id="@+id/inferenceTime"
             android:layout_width="wrap_content"
@@ -78,7 +120,6 @@
             android:textColor="#FFAA00"
             android:textSize="14sp" />
 
-        <!-- YOLOX 디버깅: shape + 감지별 클래스/신뢰도/좌표 -->
         <TextView
             android:id="@+id/yoloxShapeDebug"
             android:layout_width="match_parent"

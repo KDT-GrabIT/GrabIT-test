@@ -18,12 +18,20 @@ class OverlayView @JvmOverloads constructor(
     private var handLandmarks = listOf<List<NormalizedLandmark>>()
     private var imageWidth = 0
     private var imageHeight = 0
+    private var isFrozen = false
 
     // Paint 객체들
     private val boxPaint = Paint().apply {
         color = Color.GREEN
         style = Paint.Style.STROKE
         strokeWidth = 5f
+    }
+    /** LOCKED 상태: 실선 녹색 ("내가 잡고 있다" 느낌) */
+    private val lockedBoxPaint = Paint().apply {
+        color = Color.GREEN
+        style = Paint.Style.STROKE
+        strokeWidth = 6f
+        isAntiAlias = true
     }
 
     private val textPaint = Paint().apply {
@@ -58,7 +66,8 @@ class OverlayView @JvmOverloads constructor(
         val label: String,
         val confidence: Float,
         val rect: RectF,
-        val topLabels: List<Pair<String, Int>> = emptyList()  // (클래스명, 퍼센트) 상위 N개
+        val topLabels: List<Pair<String, Int>> = emptyList(),  // (클래스명, 퍼센트) 상위 N개
+        val rotationDegrees: Float = 0f  // 롤 각도(도): 휴대폰 옆으로 눕힌 만큼 박스도 회전
     )
 
     // YOLOX 결과 설정 (이미지 크기 전달 시 박스를 뷰 좌표로 스케일링)
@@ -75,6 +84,12 @@ class OverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    /** 고정 모드 (State B): 박스가 고정되어 추적하지 않음 */
+    fun setFrozen(frozen: Boolean) {
+        isFrozen = frozen
+        invalidate()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
@@ -84,20 +99,30 @@ class OverlayView @JvmOverloads constructor(
 
         // 1. YOLOX 박스 그리기 (width가 0일 때 coerceIn 범위 오류 방지)
         val maxX = (width - 100f).coerceAtLeast(0f)
+        val paint = if (isFrozen) lockedBoxPaint else boxPaint
         detectionBoxes.forEachIndexed { index, box ->
             val r = box.rect
             val left = r.left * scaleX
             val top = r.top * scaleY
             val right = r.right * scaleX
             val bottom = r.bottom * scaleY
-            canvas.drawRect(left, top, right, bottom, boxPaint)
+            val rot = box.rotationDegrees
+
+            val cx = (left + right) / 2f
+            val cy = (top + bottom) / 2f
+            canvas.save()
+            if (kotlin.math.abs(rot) > 0.5f) canvas.rotate(rot, cx, cy)
+            canvas.drawRect(left, top, right, bottom, paint)
             val lineH = textPaint.textSize + 4f
             var labelY = (top - 10f).coerceAtLeast(10f)
-            val labelsToShow = if (box.topLabels.isNotEmpty()) box.topLabels else listOf(box.label to (box.confidence * 100).toInt())
+            val labelsToShow = if (box.topLabels.isNotEmpty()) box.topLabels
+                else if (box.confidence >= 0.5f) listOf(box.label to (box.confidence * 100).toInt())
+                else emptyList()
             labelsToShow.forEach { (name, pct) ->
                 canvas.drawText("$name $pct%", left.coerceIn(0f, maxX), labelY, textPaint)
                 labelY += lineH
             }
+            canvas.restore()
         }
 
         // 2. 하단: 감지 개수 + 상세 (클래스 | 신뢰도 | 좌표 L,T,R,B) 한 줄씩
@@ -116,7 +141,8 @@ class OverlayView @JvmOverloads constructor(
             val r = box.rect
             val labelsStr = if (box.topLabels.isNotEmpty())
                 box.topLabels.joinToString(" | ") { "${it.first} ${it.second}%" }
-            else "${box.label} ${(box.confidence * 100).toInt()}%"
+            else if (box.confidence >= 0.5f) "${box.label} ${(box.confidence * 100).toInt()}%"
+            else "(50% 미만)"
             canvas.drawText(
                 "${idx + 1}) $labelsStr | L=${r.left.toInt()} T=${r.top.toInt()} R=${r.right.toInt()} B=${r.bottom.toInt()}",
                 pad,
