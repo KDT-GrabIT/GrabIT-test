@@ -1,54 +1,52 @@
-# 학습 시 사용한 dataset 클래스 순서 (1줄=클래스0, 2줄=클래스1, ... 53줄=클래스52)
-Haitai Pocky Blueberry 41g
-Lotte Kkokkalcorn Savory Taste 72g
-Nongshim Squid House 83g
-Nongshim Spicy Shrimp Crackers 90g
-Crown Corn Cho 66g
-Nongshim Banana Kick 75g
-Lotte Xylitol Beta Vita D 86g
-Ricola Swiss Candy Cranberry 40g
-Cavendish & Harvey Tropical Fruit Drops 200g
-Lotte Dream Cacao 82 (GABA) 86g
-Nongshim Pringles Classic 53g
-Lotte Fluffy Malang Cow Strawberry Milk 158g
-Lotte ABC Milk Chocolate 65g
-Lotte Stone Age 90g
-Lotte Squid Peanut 90g
-Nongshim Chip Potato Original 125g
-Binggrae Smoky Bacon Chip Spicy 70g
-Haitai Matdongsan 90g
-Orion Poka Chip Original 66g
-Cheongwoo Lemon Candy 100g
-Popo Candy Ice Flavor
-Big Wadadak Cola Flavor
-Nemo Snack Spicy Flavor
-Tipo Green Tea Cookie
-Crown Mychew Strawberry 92g
-Woongjin Morning Rice 500ml
-Ilhwa McCol 500ml
-Lotte Sarangcho Toktok Sparkling 330ml
-Georgia Gotica Vintage Black 390ml
-Haitai Galbae Cider 238ml
-Lotte Lets Be 175ml
-Coca-Cola Kin Cider 185ml
-Coca-Cola Fanta Grape 250ml
-Lotte Milkis 500ml
-Lotte Corn Silk Tea 500ml
-Coca-Cola Sprite 500ml
-Lotte Farmers Juice Bar Orange 1L
-Kwangdong Fermented Red Ginseng 100ml
-Kwangdong Red Ginseng Ssanghwajin 100ml
-Lotte Hot6 355ml
-Woongjin Nature Jeju Tangerine 340ml
-Lotte Cantata Sweet Americano 275ml
-Monster Energy Pipeline Punch 355ml
-Seoul Milk Morning Juice Grape 950ml
-Namyang Choco Emong 180ml
-Lotte Only Price Mineral Water
-Lotte Del Monte Cold Apple Juice
-Lotte Pepsi 160ml
-Nongshim Baeksansu 330ml
-Dongsuh Maxim TOP Master Latte
-Cheetos BBQ Flavor
-Cheetos Spicy Sweet Flavor
-Cheetos Real Corn Soup Flavor
+# 학습 시 사용한 dataset 클래스 순서 (1줄=클래스0, 2줄=클래스1, ... 50줄=클래스49)
+# instances_train_composited.json / instances_val_composited.json categories 순서
+woongjin_morning_rice_drink_500ml
+ilhwa_mccol_500ml
+fanta_grape_250ml
+pocari_sweat_500ml
+milkis_500ml
+corn_silk_tea_500ml
+sprite_500ml
+kkokkalcorn_original_72g
+nongshim_cuttlefish_snack_83g
+crown_concho_66g
+nongshim_banana_kick_75g
+pringles_original_53g
+kwangdong_hutgae_tea_500ml
+haitai_crushed_pear_238ml
+orion_poca_chip_original_66g
+woongjin_skybarley_500ml
+jeju_samdasoo_500ml
+monster_energy_ultra_355ml
+monster_energy_original_355ml
+orion_poca_chip_onion_66g
+letsbe_mild_coffee_200ml
+mountain_dew_250ml
+welchs_grape_soda_355ml
+oran_c_calamansi_250ml
+fanta_orange_250ml
+pepero_almond_37g
+pepero_nude_choco_50g
+crown_white_heim_284g
+sprite_aluminum_bottle_250ml
+pepsi_250ml
+orion_dr_you_daije_194g
+orion_gosomi_216g
+lotte_chic_choc_original
+lotte_moncher_cacao_12pack
+namyang_17tea_original
+haitai_matdongsan_300g
+woongjin_green_plum_500ml
+gatorade_600ml
+orion_korebap_baked_46g
+lotte_margaret_176g
+oran_c_orange_250ml
+cheetos_sweet_spicy_88g
+nongshim_sweet_potato_snack_83g
+orion_ogamja_potato_gratin_50g
+crown_jolly_pong_74g
+sprite_250ml
+honey_butter_chip_60g
+samyang_sattobap_67g
+nongshim_onion_rings_84g
+cheetos_smoky_barbecue_82g

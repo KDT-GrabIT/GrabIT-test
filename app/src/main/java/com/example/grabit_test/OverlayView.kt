@@ -57,7 +57,8 @@ class OverlayView @JvmOverloads constructor(
     data class DetectionBox(
         val label: String,
         val confidence: Float,
-        val rect: RectF
+        val rect: RectF,
+        val topLabels: List<Pair<String, Int>> = emptyList()  // (클래스명, 퍼센트) 상위 N개
     )
 
     // YOLOX 결과 설정 (이미지 크기 전달 시 박스를 뷰 좌표로 스케일링)
@@ -90,13 +91,13 @@ class OverlayView @JvmOverloads constructor(
             val right = r.right * scaleX
             val bottom = r.bottom * scaleY
             canvas.drawRect(left, top, right, bottom, boxPaint)
-            val labelY = (top - 10f).coerceAtLeast(10f)
-            canvas.drawText(
-                "${box.label} ${(box.confidence * 100).toInt()}%",
-                left.coerceIn(0f, maxX),
-                labelY,
-                textPaint
-            )
+            val lineH = textPaint.textSize + 4f
+            var labelY = (top - 10f).coerceAtLeast(10f)
+            val labelsToShow = if (box.topLabels.isNotEmpty()) box.topLabels else listOf(box.label to (box.confidence * 100).toInt())
+            labelsToShow.forEach { (name, pct) ->
+                canvas.drawText("$name $pct%", left.coerceIn(0f, maxX), labelY, textPaint)
+                labelY += lineH
+            }
         }
 
         // 2. 하단: 감지 개수 + 상세 (클래스 | 신뢰도 | 좌표 L,T,R,B) 한 줄씩
@@ -113,9 +114,11 @@ class OverlayView @JvmOverloads constructor(
         y += lineH
         detectionBoxes.take(maxDetailLines).forEachIndexed { idx, box ->
             val r = box.rect
-            val confPct = (box.confidence * 100).toInt()
+            val labelsStr = if (box.topLabels.isNotEmpty())
+                box.topLabels.joinToString(" | ") { "${it.first} ${it.second}%" }
+            else "${box.label} ${(box.confidence * 100).toInt()}%"
             canvas.drawText(
-                "${idx + 1}) ${box.label} conf=${box.confidence.toString().take(5)} (${confPct}%) | L=${r.left.toInt()} T=${r.top.toInt()} R=${r.right.toInt()} B=${r.bottom.toInt()}",
+                "${idx + 1}) $labelsStr | L=${r.left.toInt()} T=${r.top.toInt()} R=${r.right.toInt()} B=${r.bottom.toInt()}",
                 pad,
                 y,
                 coordTextPaint

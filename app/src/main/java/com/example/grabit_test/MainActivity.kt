@@ -78,7 +78,6 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         loadClassLabels()
-        // AI 모델 초기화
         initYOLOX()
         initMediaPipeHands()
     }
@@ -104,30 +103,33 @@ class MainActivity : AppCompatActivity() {
         return classLabels.getOrNull(classId)?.takeIf { it.isNotBlank() } ?: "Object_$classId"
     }
 
-    /** YOLOX preproc와 동일: BGR 채널 순서, 0~255 float (정규화 없음). */
-    private fun bitmapToFloatBuffer(bitmap: Bitmap, size: Int): ByteBuffer {
+    /** YOLOX preproc: BGR, 0~255 float. NCHW [1,3,H,W] 시 채널 선 출력 */
+    private fun bitmapToFloatBuffer(bitmap: Bitmap, size: Int, isNchw: Boolean = false): ByteBuffer {
         val buffer = ByteBuffer.allocateDirect(4 * size * size * 3)
         buffer.order(ByteOrder.nativeOrder())
-
         val pixels = IntArray(size * size)
         bitmap.getPixels(pixels, 0, size, 0, 0, size, size)
-
-        for (p in pixels) {
-            val r = ((p shr 16) and 0xFF).toFloat()
-            val g = ((p shr 8) and 0xFF).toFloat()
-            val b = (p and 0xFF).toFloat()
-            buffer.putFloat(b)
-            buffer.putFloat(g)
-            buffer.putFloat(r)
+        if (isNchw) {
+            for (c in 0 until 3) {  // B, G, R
+                val shift = when (c) { 0 -> 0; 1 -> 8; else -> 16 }
+                for (i in pixels.indices) {
+                    buffer.putFloat(((pixels[i] shr shift) and 0xFF).toFloat())
+                }
+            }
+        } else {
+            for (p in pixels) {
+                buffer.putFloat((p and 0xFF).toFloat())
+                buffer.putFloat(((p shr 8) and 0xFF).toFloat())
+                buffer.putFloat(((p shr 16) and 0xFF).toFloat())
+            }
         }
-
         buffer.rewind()
         return buffer
     }
 
     private fun initYOLOX() {
         try {
-            val modelFilename = "yolox_nano_640_gpu_fp16.tflite"
+            val modelFilename = "yolox_nano_640_gpu_fp16_background.tflite"
             val modelFile = loadModelFile(modelFilename)
             val options = Interpreter.Options()
             try {
@@ -305,10 +307,15 @@ class MainActivity : AppCompatActivity() {
 
         try {
             val inputShape = yoloxInterpreter!!.getInputTensor(0).shape()
-            val inputSize = if (inputShape.size >= 3 && inputShape[1] == 3) inputShape[2] else inputShape[1]
+            val isNchw = inputShape.size >= 4 && inputShape[1] == 3
+            val inputSize = when {
+                isNchw -> inputShape[2]
+                inputShape.size >= 4 -> inputShape[1]
+                else -> inputShape.last()
+            }
             val expectedBytes = 4 * inputSize * inputSize * 3
-            val resizedBitmap = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
-            val inputBuffer = bitmapToFloatBuffer(resizedBitmap, inputSize)
+            val preprocBitmap = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
+            val inputBuffer = bitmapToFloatBuffer(preprocBitmap, inputSize, isNchw)
             if (inputBuffer.remaining() != expectedBytes) {
                 Log.e(TAG, "YOLOX 입력 버퍼 크기 불일치: ${inputBuffer.remaining()} != $expectedBytes")
                 return emptyList()
@@ -404,7 +411,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val candidates = mutableListOf<OverlayView.DetectionBox>()
-        val hasObjectness = (boxSize == 85 || boxSize == 58)
+        val hasObjectness = (boxSize == 85 || boxSize == 58 || boxSize == 55)  // 80/53/50 classes
         val scoreStart = if (hasObjectness) 5 else 4
         val classCount = (boxSize - scoreStart).coerceAtLeast(1)
 
@@ -437,18 +444,23 @@ class MainActivity : AppCompatActivity() {
                 for (c in 0 until classCount) classScores[c] = output[scoreStart + c][j]
             }
 
-            val classId = classScores.indices.maxByOrNull { classScores[it] } ?: 0
-            var rawScore = classScores[classId]
-            if (rawScore > 1f || rawScore < 0f) rawScore = 1f / (1f + exp(-rawScore))
-
-            val confidence = if (useSingleScoreFormat) {
-                singleScore.coerceIn(0f, 1f)
-            } else {
-                val obj = singleScore.coerceIn(0f, 1f)
-                if (hasObjectness) (obj * rawScore).coerceIn(0f, 1f) else rawScore.coerceIn(0f, 1f)
-            }
+            val objScore = singleScore.coerceIn(0f, 1f)
+            val topK = 3
+            val topClassIds = classScores.indices
+                .map { c ->
+                    var rs = classScores[c]
+                    if (rs > 1f || rs < 0f) rs = 1f / (1f + exp(-rs))
+                    c to (objScore * rs).coerceIn(0f, 1f)
+                }
+                .sortedByDescending { it.second }
+                .take(topK)
+            val confidence = topClassIds.firstOrNull()?.second ?: 0f
             if (confidence > maxConfidenceSeen) maxConfidenceSeen = confidence
             if (confidence < minConfidenceToShow) continue
+
+            val topLabels = topClassIds.map { (cid, conf) ->
+                getClassLabel(cid) to (conf * 100).toInt()
+            }
 
             // 좌표: 정규화 0~1이고 v2>v0, v3>v1 이면 (x1,y1,x2,y2). 아니면 (cx,cy,w,h).
             val left: Float
@@ -486,9 +498,10 @@ class MainActivity : AppCompatActivity() {
 
             candidates.add(
                 OverlayView.DetectionBox(
-                    label = getClassLabel(classId),
+                    label = topLabels.firstOrNull()?.first ?: "",
                     confidence = confidence,
-                    rect = android.graphics.RectF(left, top, right, bottom)
+                    rect = android.graphics.RectF(left, top, right, bottom),
+                    topLabels = topLabels
                 )
             )
         }
