@@ -14,6 +14,7 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.graphics.RectF
 import com.example.grabitTest.databinding.ActivityMainBinding
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.GpuDelegate
@@ -59,6 +60,11 @@ class MainActivity : AppCompatActivity() {
     /** State B에서 계속 추적할 타겟 라벨 (락 시점의 box.label) */
     private var lockedTargetLabel: String = ""
 
+    /** 같은 객체가 연속 N프레임 감지됐을 때만 고정 (잘못된 클래스 방지) */
+    private val LOCK_CONFIRM_FRAMES = 3
+    private var pendingLockBox: OverlayView.DetectionBox? = null
+    private var pendingLockCount = 0
+
     private val TARGET_CONFIDENCE_THRESHOLD = 0.6f  // 60% 이상 확신 시에만 고정 (잘못된 클래스 방지)
     private val TARGET_ANY = "모든 상품"
     private val currentTargetLabel = AtomicReference<String>("")
@@ -103,20 +109,19 @@ class MainActivity : AppCompatActivity() {
     private fun initGyroTrackingManager() {
         gyroManager = GyroTrackingManager(
             context = this,
-            runYOLOX = { runYOLOX(it) },
-            findTargetMatch = { detections, label -> findTargetMatch(detections, label) },
-            getTargetLabel = { getTargetLabel() },
-            onTransitionToLocked = { box, w, h -> transitionToLocked(box, w, h) },
-            onTransitionToSearching = { transitionToSearching() },
-            getCurrentBox = { frozenBox },
-            setCurrentBox = { box, w, h ->
-                frozenBox = box
-                frozenImageWidth = w
-                frozenImageHeight = h
-                if (searchState == SearchState.LOCKED && box != null) {
-                    binding.overlayView.setDetections(listOf(box), w, h)
+            onBoxUpdate = { rect: RectF ->
+                runOnUiThread {
+                    val box = OverlayView.DetectionBox(
+                        label = lockedTargetLabel,
+                        confidence = 0.9f,
+                        rect = rect,
+                        topLabels = listOf(lockedTargetLabel to 90)
+                    )
+                    frozenBox = box
+                    binding.overlayView.setDetections(listOf(box), frozenImageWidth, frozenImageHeight)
                 }
-            }
+            },
+            onTrackingLost = { transitionToSearching() }
         )
     }
 
@@ -133,6 +138,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getTargetLabel(): String = currentTargetLabel.get()
+
+    /** 타겟에 맞는 detection만 반환. "모든 상품"이면 전부, 특정 상품이면 해당 상품만. */
+    private fun filterDetectionsByTarget(detections: List<OverlayView.DetectionBox>, targetLabel: String): List<OverlayView.DetectionBox> {
+        val target = targetLabel.trim()
+        if (target.isBlank() || target == TARGET_ANY) return detections
+
+        return detections
+            .mapNotNull { box ->
+                val targetConf = when {
+                    box.label.trim().equals(target, ignoreCase = true) -> box.confidence
+                    else -> box.topLabels.find { it.first.trim().equals(target, ignoreCase = true) }?.second?.div(100f)
+                }
+                if (targetConf != null && targetConf >= TARGET_CONFIDENCE_THRESHOLD) {
+                    if (box.label.trim().equals(target, ignoreCase = true)) box
+                    else box.copy(
+                        label = target,
+                        confidence = targetConf,
+                        topLabels = listOf(target to (targetConf * 100).toInt())
+                    )
+                } else null
+            }
+    }
 
     /** 타겟이 primary label 또는 topLabels에 있고 confidence >= 70%인 detection 중 최고 확률 선택.
      *  "모든 상품" 선택 시: confidence >= 70%인 detection 중 최고 확률 반환 */
@@ -181,6 +208,8 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             searchState = SearchState.SEARCHING
             lockedTargetLabel = ""
+            pendingLockBox = null
+            pendingLockCount = 0
             binding.resetBtn.visibility = View.GONE
             binding.overlayView.setDetections(emptyList(), 0, 0)
             binding.overlayView.setFrozen(false)
@@ -334,36 +363,42 @@ class MainActivity : AppCompatActivity() {
             val h = bitmap.height
             val inferenceTime = System.currentTimeMillis() - startTime
 
-            when (gyroManager.state) {
-                GyroTrackingManager.State.SCANNING -> {
-                    val result = gyroManager.processFrameSearching(bitmap)
-                    when (result) {
-                        is GyroTrackingManager.ProcessResult.Scanning ->
-                            displayResults(result.detections, inferenceTime, w, h)
-                        is GyroTrackingManager.ProcessResult.SwitchedToLocked -> {
-                            updateFPS()
-                            imageProxy.close()
-                            return
+            when (searchState) {
+                SearchState.SEARCHING -> {
+                    val detections = runYOLOX(bitmap)
+                    val matched = findTargetMatch(detections, getTargetLabel())
+                    if (matched != null && matched.confidence >= TARGET_CONFIDENCE_THRESHOLD) {
+                        // 같은 클래스가 연속 감지됐는지 확인 (잘못된 클래스 방지)
+                        val prev = pendingLockBox
+                        if (prev != null && prev.label == matched.label &&
+                            RectF.intersects(matched.rect, prev.rect)) {
+                            pendingLockCount++
+                            if (pendingLockCount >= LOCK_CONFIRM_FRAMES) {
+                                pendingLockBox = null
+                                pendingLockCount = 0
+                                transitionToLocked(matched, w, h)
+                                frozenBox = matched
+                                frozenImageWidth = w
+                                frozenImageHeight = h
+                                gyroManager.startTracking(matched.rect, w, h)
+                                updateFPS()
+                                imageProxy.close()
+                                return
+                            }
+                        } else {
+                            pendingLockBox = matched
+                            pendingLockCount = 1
                         }
-                        else -> { }
+                    } else {
+                        pendingLockBox = null
+                        pendingLockCount = 0
                     }
+                    displayResults(filterDetectionsByTarget(detections, getTargetLabel()), inferenceTime, w, h)
                 }
-                GyroTrackingManager.State.LOCKED -> {
-                    val result = gyroManager.processFrameLocked(bitmap)
-                    when (result) {
-                        is GyroTrackingManager.ProcessResult.Locked ->
-                            displayResults(listOf(result.box), inferenceTime, frozenImageWidth, frozenImageHeight)
-                        is GyroTrackingManager.ProcessResult.ReturnedToSearching -> {
-                            updateFPS()
-                            imageProxy.close()
-                            return
-                        }
-                        else -> {
-                            val box = frozenBox
-                            val boxes = if (box != null) listOf(box) else emptyList()
-                            displayResults(boxes, inferenceTime, frozenImageWidth, frozenImageHeight)
-                        }
-                    }
+                SearchState.LOCKED -> {
+                    val box = frozenBox
+                    val boxes = if (box != null) listOf(box) else emptyList()
+                    displayResults(boxes, inferenceTime, frozenImageWidth, frozenImageHeight)
                 }
             }
 
@@ -718,7 +753,7 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor.shutdown()
         yoloxInterpreter?.close()
         gpuDelegate?.close()
-        gyroManager.resetToSearchingFromUI()
+        gyroManager.stopTracking()
     }
 
     companion object {
