@@ -55,8 +55,6 @@ class MainActivity : AppCompatActivity() {
     private var frameCount = 0
     private var lastFpsTime = System.currentTimeMillis()
 
-    // YOLOX 출력 shape (화면에 표시용, Logcat 대신)
-    private var yoloxShapeInfo: String? = null
     private var lastYoloxMaxConf = 0f
 
     /** 클래스 인덱스 → 이름 (assets/classes.txt, 한 줄에 하나, # 무시) */
@@ -350,7 +348,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun initYOLOX() {
         try {
-            val modelFilename = "yolox_nano_640_gpu_fp16_background.tflite"
+            val modelFilename = "yolox_nano_49cls_float16.tflite"
             val modelFile = loadModelFile(modelFilename)
             val options = Interpreter.Options()
             try {
@@ -675,17 +673,13 @@ class MainActivity : AppCompatActivity() {
         } else true
 
         if (!yoloxShapeLogged) {
-            yoloxShapeInfo = "YOLOX shape: dim1=$dim1 dim2=$dim2 → numBoxes=$numBoxes boxSize=$boxSize"
             yoloxShapeLogged = true
-            // 첫 행 raw 값 (모델 출력 형식 확인용)
-            if (isRowMajor && output.isNotEmpty() && output[0].size >= 6) {
-                val r = output[0]
-                Log.d(TAG, "YOLOX 출력 형식 | isNormalized=$isNormalized | row0: v0=${r[0]} v1=${r[1]} v2=${r[2]} v3=${r[3]} obj=${r.getOrNull(4)} clsMax=${r.getOrNull(5)}")
-            }
+            Log.d(TAG, "YOLOX shape: dim1=$dim1 dim2=$dim2 → numBoxes=$numBoxes boxSize=$boxSize")
         }
 
         val candidates = mutableListOf<OverlayView.DetectionBox>()
-        val hasObjectness = (boxSize == 85 || boxSize == 58 || boxSize == 55)  // 80/53/50 classes
+        // 4(box)+1(obj)+N(cls): 85(80), 58(53), 55(50), 54(49)
+        val hasObjectness = (boxSize == 85 || boxSize == 58 || boxSize == 55 || boxSize == 54)
         val scoreStart = if (hasObjectness) 5 else 4
         val classCount = (boxSize - scoreStart).coerceAtLeast(1)
 
@@ -887,19 +881,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             binding.inferenceTime.text = "⏱️ Inference: ${inferenceTime}ms"
-
-            val detailLines = detections.take(10).mapIndexed { i, d ->
-                "${i + 1}) ${d.label} conf=${String.format("%.2f", d.confidence)} L=${d.rect.left.toInt()},T=${d.rect.top.toInt()},R=${d.rect.right.toInt()},B=${d.rect.bottom.toInt()}"
-            }
-            val debugText = buildString {
-                yoloxShapeInfo?.let { append(it).append("\n") }
-                if (detailLines.isNotEmpty()) {
-                    append(if (searchState == SearchState.LOCKED) "고정된 영역:" else "감지상세(클래스|신뢰도|좌표):")
-                    append("\n")
-                    append(detailLines.joinToString("\n"))
-                }
-            }
-            if (debugText.isNotBlank()) binding.yoloxShapeDebug.text = debugText
         }
     }
 
