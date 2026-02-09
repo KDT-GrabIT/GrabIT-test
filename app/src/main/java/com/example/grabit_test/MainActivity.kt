@@ -665,8 +665,10 @@ class MainActivity : AppCompatActivity() {
             val h = bitmap.height
             val inferenceTime = System.currentTimeMillis() - startTime
 
-            // MediaPipe Hands: LIVE_STREAM → 비동기 전달만 하고 즉시 return (블로킹 없음)
-            sendFrameToHands(bitmap, imageProxy.imageInfo.timestamp)
+            // 손 인식: LOCKED일 때만 실행 (occlusion/optical flow용). SEARCHING에서는 파이프라인 비활성화
+            if (searchState == SearchState.LOCKED) {
+                sendFrameToHands(bitmap, imageProxy.imageInfo.timestamp)
+            }
 
             when (searchState) {
                 SearchState.SEARCHING -> {
@@ -1086,7 +1088,9 @@ class MainActivity : AppCompatActivity() {
     ) {
         runOnUiThread {
             binding.overlayView.setDetections(detections, imageWidth, imageHeight)
-            binding.overlayView.setHands(latestHandsResult.get())
+            binding.overlayView.setHands(
+                if (searchState == SearchState.LOCKED) latestHandsResult.get() else null
+            )
 
             when (searchState) {
                 SearchState.SEARCHING -> {
