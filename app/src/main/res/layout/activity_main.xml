@@ -82,12 +82,58 @@
                 android:visibility="gone"
                 android:textSize="12sp" />
 
+            <Button
+                android:id="@+id/confirmBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="확인"
+                android:visibility="gone"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/reinputBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="재입력"
+                android:visibility="gone"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/retryBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="다시 찾기"
+                android:visibility="gone"
+                android:textSize="12sp" />
+
+            <ImageButton
+                android:id="@+id/micButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:contentDescription="음성 입력"
+                android:src="@android:drawable/ic_btn_speak_now"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/sttResultText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="#33000000"
+            android:padding="8dp"
+            android:text="🎤 인식된 음성 텍스트가 여기 표시됩니다"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:visibility="visible" />
 
         <TextView
             android:id="@+id/fpsText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:text="FPS: --"
             android:textColor="#00FF00"
             android:textSize="14sp"

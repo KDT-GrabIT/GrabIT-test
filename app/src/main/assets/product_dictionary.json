@@ -1,0 +1,202 @@
+{
+  "woongjin_morning_rice_drink_500ml": {
+    "aliases": ["아침햇살", "웅진 아침햇살"],
+    "tts_ko": "아침햇살"
+  },
+  "ilhwa_mccol_500ml": {
+    "aliases": ["맥콜", "일화 맥콜"],
+    "tts_ko": "맥콜"
+  },
+  "fanta_grape_250ml": {
+    "aliases": ["환타 포도", "포도 환타"],
+    "tts_ko": "환타 포도"
+  },
+  "pocari_sweat_500ml": {
+    "aliases": ["포카리", "포카리 스웨트"],
+    "tts_ko": "포카리 스웨트"
+  },
+  "milkis_500ml": {
+    "aliases": ["밀키스"],
+    "tts_ko": "밀키스"
+  },
+  "corn_silk_tea_500ml": {
+    "aliases": ["옥수수 수염차", "옥수수차"],
+    "tts_ko": "옥수수 수염차"
+  },
+  "sprite_500ml": {
+    "aliases": ["스프라이트"],
+    "tts_ko": "스프라이트"
+  },
+  "kkokkalcorn_original_72g": {
+    "aliases": ["꼬깔콘", "꼬깔콘 오리지널"],
+    "tts_ko": "꼬깔콘"
+  },
+  "nongshim_cuttlefish_snack_83g": {
+    "aliases": ["오징어집", "농심 오징어집"],
+    "tts_ko": "오징어집"
+  },
+  "crown_concho_66g": {
+    "aliases": ["콘초"],
+    "tts_ko": "콘초"
+  },
+  "nongshim_banana_kick_75g": {
+    "aliases": ["바나나킥"],
+    "tts_ko": "바나나킥"
+  },
+  "pringles_original_53g": {
+    "aliases": ["프링글스", "프링글스 오리지널"],
+    "tts_ko": "프링글스 오리지널"
+  },
+  "kwangdong_hutgae_tea_500ml": {
+    "aliases": ["헛개차", "광동 헛개차"],
+    "tts_ko": "헛개차"
+  },
+  "haitai_crushed_pear_238ml": {
+    "aliases": ["갈아만든 배", "배 음료"],
+    "tts_ko": "갈아만든 배"
+  },
+  "orion_poca_chip_original_66g": {
+    "aliases": ["포카칩", "포카칩 오리지널"],
+    "tts_ko": "포카칩"
+  },
+  "woongjin_skybarley_500ml": {
+    "aliases": ["하늘보리"],
+    "tts_ko": "하늘보리"
+  },
+  "jeju_samdasoo_500ml": {
+    "aliases": ["삼다수", "제주 삼다수"],
+    "tts_ko": "삼다수"
+  },
+  "monster_energy_ultra_355ml": {
+    "aliases": ["몬스터 울트라", "몬스터 흰색"],
+    "tts_ko": "몬스터 울트라"
+  },
+  "monster_energy_original_355ml": {
+    "aliases": ["몬스터 에너지", "몬스터 기본"],
+    "tts_ko": "몬스터 에너지"
+  },
+  "orion_poca_chip_onion_66g": {
+    "aliases": ["포카칩 어니언", "양파 포카칩"],
+    "tts_ko": "포카칩 어니언"
+  },
+  "letsbe_mild_coffee_200ml": {
+    "aliases": ["레쓰비", "레쓰비 마일드"],
+    "tts_ko": "레쓰비 마일드"
+  },
+  "mountain_dew_250ml": {
+    "aliases": ["마운틴듀"],
+    "tts_ko": "마운틴듀"
+  },
+  "welchs_grape_soda_355ml": {
+    "aliases": ["웰치스 포도", "웰치스"],
+    "tts_ko": "웰치스 포도"
+  },
+  "oran_c_calamansi_250ml": {
+    "aliases": ["오란씨 깔라만시"],
+    "tts_ko": "오란씨 깔라만시"
+  },
+  "fanta_orange_250ml": {
+    "aliases": ["환타 오렌지", "오렌지 환타"],
+    "tts_ko": "환타 오렌지"
+  },
+  "pepero_almond_37g": {
+    "aliases": ["아몬드 빼빼로", "빼빼로 아몬드"],
+    "tts_ko": "아몬드 빼빼로"
+  },
+  "pepero_nude_choco_50g": {
+    "aliases": ["누드 빼빼로"],
+    "tts_ko": "누드 빼빼로"
+  },
+  "crown_white_heim_284g": {
+    "aliases": ["화이트하임"],
+    "tts_ko": "화이트하임"
+  },
+  "sprite_aluminum_bottle_250ml": {
+    "aliases": ["스프라이트 캔", "스프라이트 작은거"],
+    "tts_ko": "스프라이트"
+  },
+  "pepsi_250ml": {
+    "aliases": ["펩시", "펩시 콜라"],
+    "tts_ko": "펩시"
+  },
+  "orion_dr_you_daije_194g": {
+    "aliases": ["닥터유 다이제"],
+    "tts_ko": "닥터유 다이제"
+  },
+  "orion_gosomi_216g": {
+    "aliases": ["고소미"],
+    "tts_ko": "고소미"
+  },
+  "lotte_chic_choc_original": {
+    "aliases": ["칙촉"],
+    "tts_ko": "칙촉"
+  },
+  "lotte_moncher_cacao_12pack": {
+    "aliases": ["몽쉘", "몽쉘 카카오"],
+    "tts_ko": "몽쉘 카카오"
+  },
+  "namyang_17tea_original": {
+    "aliases": ["17차", "십칠차"],
+    "tts_ko": "17차"
+  },
+  "haitai_matdongsan_300g": {
+    "aliases": ["맛동산"],
+    "tts_ko": "맛동산"
+  },
+  "woongjin_green_plum_500ml": {
+    "aliases": ["매실 음료", "웅진 매실", "초록매실"],
+    "tts_ko": "웅진 매실"
+  },
+  "gatorade_600ml": {
+    "aliases": ["게토레이"],
+    "tts_ko": "게토레이"
+  },
+  "orion_korebap_baked_46g": {
+    "aliases": ["고래밥"],
+    "tts_ko": "고래밥"
+  },
+  "lotte_margaret_176g": {
+    "aliases": ["마가렛트"],
+    "tts_ko": "마가렛트"
+  },
+  "oran_c_orange_250ml": {
+    "aliases": ["오란씨 오렌지"],
+    "tts_ko": "오란씨 오렌지"
+  },
+  "cheetos_sweet_spicy_88g": {
+    "aliases": ["치토스 매콤달콤"],
+    "tts_ko": "치토스 매콤달콤"
+  },
+  "nongshim_sweet_potato_snack_83g": {
+    "aliases": ["고구마깡"],
+    "tts_ko": "고구마깡"
+  },
+  "orion_ogamja_potato_gratin_50g": {
+    "aliases": ["오감자", "오감자 그라탕"],
+    "tts_ko": "오감자"
+  },
+  "crown_jolly_pong_74g": {
+    "aliases": ["죠리퐁"],
+    "tts_ko": "죠리퐁"
+  },
+  "sprite_250ml": {
+    "aliases": ["스프라이트 작은거"],
+    "tts_ko": "스프라이트"
+  },
+  "honey_butter_chip_60g": {
+    "aliases": ["허니버터칩"],
+    "tts_ko": "허니버터칩"
+  },
+  "samyang_sattobap_67g": {
+    "aliases": ["사또밥"],
+    "tts_ko": "사또밥"
+  },
+  "nongshim_onion_rings_84g": {
+    "aliases": ["양파링"],
+    "tts_ko": "양파링"
+  },
+  "cheetos_smoky_barbecue_82g": {
+    "aliases": ["치토스 바베큐"],
+    "tts_ko": "치토스 바베큐"
+  }
+}
