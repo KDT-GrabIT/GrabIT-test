@@ -76,14 +76,14 @@ class MainActivity : AppCompatActivity() {
     /** State B에서 계속 추적할 타겟 라벨 (락 시점의 box.label) */
     private var lockedTargetLabel: String = ""
 
-    /** 같은 객체가 연속 N프레임 감지됐을 때만 고정 (잘못된 클래스 방지) */
-    private val LOCK_CONFIRM_FRAMES = 3
+    /** 같은 객체가 연속 N프레임 감지됐을 때 고정 */
+    private val LOCK_CONFIRM_FRAMES = 2
     private var pendingLockBox: OverlayView.DetectionBox? = null
     private var pendingLockCount = 0
 
-    /** LOCKED 시 YOLOX 검증+보정: N프레임마다 1회 실행 (손 뻗을 때 인식 유지) */
+    /** LOCKED 시 YOLOX 검증+보정: N프레임마다 1회 실행 (3으로 줄여 드리프트 보정 빈도 증가) */
     private val VALIDATION_INTERVAL = 3
-    private val VALIDATION_FAIL_LIMIT = 6
+    private val VALIDATION_FAIL_LIMIT = 3
     private var validationFailCount = 0
     private var lockedFrameCount = 0
 
@@ -92,11 +92,27 @@ class MainActivity : AppCompatActivity() {
 
     private var wasOccluded = false  // occlusion → non-occlusion 전환 시 gyro 동기화용
 
-    private val TARGET_CONFIDENCE_THRESHOLD = 0.6f  // 60% 이상 확신 시에만 고정 (잘못된 클래스 방지)
+    private val TARGET_CONFIDENCE_THRESHOLD = 0.5f  // 50% 이상 확신 시 고정 (탐지 용이하게 완화)
     private val TARGET_ANY = "모든 상품"
     private val currentTargetLabel = AtomicReference<String>("")
 
-    private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+    // STT / TTS
+    private var sttManager: STTManager? = null
+    private var ttsManager: TTSManager? = null
+    private var beepPlayer: BeepPlayer? = null
+    private var voiceFlowController: VoiceFlowController? = null
+    private val searchTimeoutHandler = Handler(Looper.getMainLooper())
+    private var searchTimeoutRunnable: Runnable? = null
+    private val SEARCH_TIMEOUT_MS = 30_000L
+    private val POSITION_ANNOUNCE_INTERVAL_MS = 5000L
+    private var positionAnnounceRunnable: Runnable? = null
+    /** 음성으로 찾기 요청한 상품 클래스(실제 일치 여부 검사용). null = 음성 플로우 아님 */
+    private var voiceSearchTargetLabel: String? = null
+
+    private val REQUIRED_PERMISSIONS = arrayOf(
+        Manifest.permission.CAMERA,
+        Manifest.permission.RECORD_AUDIO
+    )
     private val REQUEST_CODE_PERMISSIONS = 10
 
     // 화면 상태
@@ -137,13 +153,16 @@ class MainActivity : AppCompatActivity() {
         initMediaPipeHands()
         setupTargetSpinner()
         initGyroTrackingManager()
-        initTTS()
-        initSTT()
+        initSttTts()
 
         binding.firstScreen.setOnClickListener { onFirstScreenClicked() }
         binding.resetBtn.setOnClickListener { gyroManager.resetToSearchingFromUI() }
         binding.btnFirstScreen.setOnClickListener { goToFirstScreen() }
         setupProductDrawer()
+        binding.micButton.setOnClickListener { onMicButtonClicked() }
+        binding.confirmBtn.setOnClickListener { voiceFlowController?.onConfirmClicked() }
+        binding.reinputBtn.setOnClickListener { voiceFlowController?.onReinputClicked() }
+        binding.retryBtn.setOnClickListener { voiceFlowController?.onRetrySearch() }
 
         if (allPermissionsGranted()) {
             showFirstScreen()
@@ -240,145 +259,191 @@ class MainActivity : AppCompatActivity() {
 
     private fun onFirstScreenClicked() {
         if (screenState != ScreenState.FIRST_SCREEN) return
-        startSTTForObject()
+        sttManager?.startListening()
     }
 
-    private fun startSTTForObject() {
-        if (speechRecognizer == null) {
-            Toast.makeText(this, "음성 인식을 사용할 수 없습니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-        binding.sttProgress.visibility = View.VISIBLE
-        binding.welcomeText.text = "듣고 있습니다...\n찾고 싶은 물건을 말해주세요"
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "찾고 싶은 물건을 말해주세요")
-        }
-
-        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: android.os.Bundle?) {}
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-
-            override fun onError(error: Int) {
+    private fun initSttTts() {
+        ttsManager = TTSManager(
+            context = this,
+            onReady = { Log.d(TAG, "TTS 준비 완료") },
+            onSpeakDone = { },
+            onError = { msg ->
                 runOnUiThread {
-                    binding.sttProgress.visibility = View.GONE
-                    binding.welcomeText.text = "다시 터치하여 말해주세요"
-                    Toast.makeText(this@MainActivity, "음성 인식 실패. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                    Log.e(TAG, "[TTS 에러] $msg")
+                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                 }
             }
-
-            override fun onResults(results: android.os.Bundle?) {
-                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                val text = matches?.firstOrNull()?.trim() ?: ""
-                runOnUiThread {
-                    binding.sttProgress.visibility = View.GONE
-                    binding.welcomeText.text = "화면을 터치한 후\n찾고 싶은 물건을 말해주세요"
-                    if (text.isNotEmpty()) {
-                        val matchedLabel = matchSttToClass(text)
-                        currentTargetLabel.set(matchedLabel)
-                        val speakName = if (ProductDictionary.isLoaded()) ProductDictionary.getDisplayNameKo(matchedLabel) else matchedLabel
-                        speak("$speakName 찾겠습니다.") {
-                            runOnUiThread { showCameraScreen() }
-                        }
-                    } else {
-                        Toast.makeText(this@MainActivity, "다시 말해주세요.", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-
-            override fun onPartialResults(partialResults: android.os.Bundle?) {}
-            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
-        })
-
-        speechRecognizer?.startListening(intent)
-    }
-
-    /** STT 결과를 클래스 라벨과 매칭. product_dictionary.json 우선(초록매실→웅진 매실 등), 없으면 기존 키워드/클래스 매칭 */
-    private fun matchSttToClass(sttText: String): String {
-        val t = sttText.trim()
-        if (t.isEmpty()) return TARGET_ANY
-        ProductDictionary.findClassByStt(t)?.let { return it }
-        val normalized = t.replace(" ", "").lowercase()
-        if (normalized.isEmpty()) return TARGET_ANY
-        val krToEn = mapOf(
-            "물" to "water", "음료" to TARGET_ANY, "과자" to TARGET_ANY,
-            "모두" to TARGET_ANY, "전부" to TARGET_ANY, "다" to TARGET_ANY
         )
-        for ((kr, en) in krToEn) {
-            if (normalized.contains(kr)) {
-                if (en == TARGET_ANY) return TARGET_ANY
-                return classLabels.find { it.lowercase().contains(en) } ?: TARGET_ANY
+        beepPlayer = BeepPlayer().also { it.init() }
+
+        ttsManager?.init { success ->
+            runOnUiThread {
+                if (success && beepPlayer != null) {
+                    voiceFlowController = VoiceFlowController(
+                        ttsManager = ttsManager!!,
+                        beepPlayer = beepPlayer!!,
+                        onStateChanged = { _, _ -> runOnUiThread { updateVoiceFlowButtonVisibility() } },
+                        onSystemAnnounce = { msg -> runOnUiThread { binding.sttResultText.text = "🔊 $msg" } },
+                        onRequestStartStt = { runOnUiThread { sttManager?.startListening() } },
+                        onStartSearch = { productName -> runOnUiThread { onStartSearchFromVoiceFlow(productName) } }
+                    )
+                    voiceFlowController?.start()
+                    Log.d(TAG, "VoiceFlowController 시작")
+                } else {
+                    Log.e(TAG, "TTS 초기화 실패")
+                }
             }
         }
+
+        sttManager = STTManager(
+            context = this,
+            onResult = { text ->
+                runOnUiThread {
+                    Log.d(TAG, "[STT 결과] $text")
+                    binding.sttResultText.text = "🎤 $text"
+                    voiceFlowController?.onSttResult(text)
+                }
+            },
+            onError = { msg ->
+                runOnUiThread {
+                    Log.e(TAG, "[STT 에러] $msg")
+                    binding.sttResultText.text = "❌ $msg"
+                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onListeningChanged = { listening ->
+                runOnUiThread {
+                    binding.micButton.isEnabled = !listening
+                    if (listening) binding.sttResultText.text = "🎤 듣는 중..."
+                    updateVoiceFlowButtonVisibility()
+                }
+            }
+        ).also { if (it.init()) Log.d(TAG, "STT 초기화 완료") }
+    }
+
+    private fun updateVoiceFlowButtonVisibility() {
+        val state = voiceFlowController?.currentState ?: return
+        when (state) {
+            VoiceFlowController.VoiceFlowState.CONFIRM_PRODUCT,
+            VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION -> {
+                binding.confirmBtn.visibility = View.VISIBLE
+                binding.reinputBtn.visibility = View.VISIBLE
+                binding.retryBtn.visibility = View.GONE
+            }
+            VoiceFlowController.VoiceFlowState.SEARCH_RESULT -> {
+                binding.confirmBtn.visibility = View.GONE
+                binding.reinputBtn.visibility = View.GONE
+                binding.retryBtn.visibility = View.VISIBLE
+            }
+            VoiceFlowController.VoiceFlowState.SEARCH_FAILED -> {
+                binding.confirmBtn.visibility = View.GONE
+                binding.reinputBtn.visibility = View.GONE
+                binding.retryBtn.visibility = View.VISIBLE
+                binding.previewView.visibility = View.GONE
+                binding.overlayView.visibility = View.GONE
+            }
+            VoiceFlowController.VoiceFlowState.WAITING_PRODUCT_NAME,
+            VoiceFlowController.VoiceFlowState.APP_START -> {
+                binding.confirmBtn.visibility = View.GONE
+                binding.reinputBtn.visibility = View.GONE
+                binding.retryBtn.visibility = View.GONE
+                // preview/overlay는 건드리지 않음 (버튼으로 카메라 켠 뒤 STT 콜백 시 꺼지던 현상 방지)
+            }
+            else -> {
+                binding.confirmBtn.visibility = View.GONE
+                binding.reinputBtn.visibility = View.GONE
+                binding.retryBtn.visibility = View.GONE
+            }
+        }
+    }
+
+    /** 음성 플로우에서 확인 클릭 시: 카메라 켜고 실제 탐지 시작 */
+    private fun onStartSearchFromVoiceFlow(productName: String) {
+        cancelSearchTimeout()
+        val targetClass = mapSpokenToClass(productName)
+        voiceSearchTargetLabel = targetClass
+        currentTargetLabel.set(targetClass)
+        binding.targetSpinner.setSelection(
+            (listOf(TARGET_ANY) + classLabels).indexOf(targetClass).coerceAtLeast(0)
+        )
+        binding.startSearchBtn.visibility = View.GONE
+        binding.previewView.visibility = View.VISIBLE
+        binding.overlayView.visibility = View.VISIBLE
+        startCamera()
+        startSearchTimeout()
+    }
+
+    private fun mapSpokenToClass(spoken: String): String {
+        if (spoken.isBlank()) return TARGET_ANY
+        ProductDictionary.findClassByStt(spoken)?.let { return it }
+        val s = spoken.trim().lowercase().replace(" ", "")
         for (label in classLabels) {
-            val lower = label.lowercase()
-            if (lower.contains(normalized) || normalized.length >= 2 && lower.contains(normalized.take(3))) return label
+            val labelNorm = label.lowercase().replace("_", "")
+            if (labelNorm.contains(s) || s.contains(labelNorm.take(3))) return label
         }
         return TARGET_ANY
-    }
-
-    private fun startSTTForYesNo() {
-        if (speechRecognizer == null || !waitingForYesNo) return
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
-        }
-        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(p: android.os.Bundle?) {}
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(b: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-
-            override fun onError(error: Int) {
-                runOnUiThread { waitingForYesNo = false }
-            }
-
-            override fun onResults(results: android.os.Bundle?) {
-                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                val text = matches?.firstOrNull()?.trim() ?: ""
-                runOnUiThread {
-                    waitingForYesNo = false
-                    when {
-                        text.contains("예") || text.contains("네") || text.contains("응") || text.contains("어") -> {
-                            speak("다시 찾겠습니다.")
-                            transitionToSearching()
-                            // 카메라 화면 유지, 같은/다른 물건 다시 찾기만 진행
-                        }
-                        text.contains("아니") || text.contains("그만") || text.contains("종료") -> {
-                            transitionToSearching()
-                            stopCamera()
-                            speak("첫 화면으로 돌아갑니다.") {
-                                runOnUiThread {
-                                    showFirstScreen()
-                                    playWelcomeTTS()
-                                }
-                            }
-                        }
-                        else -> {
-                            speak("예 또는 아니오로 답해주세요. 다른 물건을 찾으시겠습니까?")
-                            waitingForYesNo = true
-                            startSTTForYesNo()
-                        }
-                    }
-                }
-            }
-
-            override fun onPartialResults(p: android.os.Bundle?) {}
-            override fun onEvent(t: Int, p: android.os.Bundle?) {}
-        })
-        speechRecognizer?.startListening(intent)
     }
 
     private fun stopCamera() {
         try {
             ProcessCameraProvider.getInstance(this).get().unbindAll()
         } catch (_: Exception) {}
+    }
+
+    private fun startSearchTimeout() {
+        cancelSearchTimeout()
+        searchTimeoutRunnable = Runnable {
+            if (voiceFlowController?.currentState == VoiceFlowController.VoiceFlowState.SEARCHING_PRODUCT) {
+                runOnUiThread {
+                    voiceSearchTargetLabel = null
+                    voiceFlowController?.onSearchComplete(false)
+                    binding.previewView.visibility = View.GONE
+                    binding.overlayView.visibility = View.GONE
+                }
+            }
+        }
+        searchTimeoutHandler.postDelayed(searchTimeoutRunnable!!, SEARCH_TIMEOUT_MS)
+    }
+
+    private fun cancelSearchTimeout() {
+        searchTimeoutRunnable?.let { searchTimeoutHandler.removeCallbacks(it) }
+        searchTimeoutRunnable = null
+    }
+
+    private fun startPositionAnnounce() {
+        stopPositionAnnounce()
+        positionAnnounceRunnable = object : Runnable {
+            override fun run() {
+                val box = frozenBox ?: return
+                val w = frozenImageWidth
+                val h = frozenImageHeight
+                if (w <= 0 || h <= 0) return
+                val displayName = if (ProductDictionary.isLoaded())
+                    ProductDictionary.getDisplayNameKo(lockedTargetLabel) else lockedTargetLabel
+                voiceFlowController?.announcePosition(displayName, box.rect, w, h)
+                searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_INTERVAL_MS)
+            }
+        }
+        searchTimeoutHandler.postDelayed(positionAnnounceRunnable!!, POSITION_ANNOUNCE_INTERVAL_MS)
+    }
+
+    private fun stopPositionAnnounce() {
+        positionAnnounceRunnable?.let { searchTimeoutHandler.removeCallbacks(it) }
+        positionAnnounceRunnable = null
+    }
+
+    private fun onMicButtonClicked() {
+        if (!allPermissionsGranted()) {
+            Toast.makeText(this, "마이크 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+            return
+        }
+        if (sttManager?.isListening() == true) {
+            sttManager?.stopListening()
+        } else {
+            binding.sttResultText.text = "🎤 듣는 중..."
+            sttManager?.startListening()
+        }
     }
 
     private fun initGyroTrackingManager() {
@@ -410,7 +475,7 @@ class MainActivity : AppCompatActivity() {
             val options = HandLandmarker.HandLandmarkerOptions.builder()
                 .setBaseOptions(baseOptions)
                 .setRunningMode(RunningMode.LIVE_STREAM)
-                .setNumHands(2)
+                .setNumHands(1)
                 .setMinHandDetectionConfidence(0.5f)
                 .setMinHandPresenceConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f)
@@ -497,13 +562,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** 타겟이 primary label 또는 topLabels에 있고 confidence >= 70%인 detection 중 최고 확률 선택.
-     *  "모든 상품" 선택 시: confidence >= 70%인 detection 중 최고 확률 반환 */
-    private fun findTargetMatch(detections: List<OverlayView.DetectionBox>, targetLabel: String): OverlayView.DetectionBox? {
+     *  "모든 상품" 선택 시: confidence >= 70%인 detection 중 최고 확률 반환.
+     *  @return Pair(매칭된 박스, 실제 1순위 라벨). 음성 플로우에서 '찾았다' 판단 시 실제 라벨 사용. */
+    private fun findTargetMatch(detections: List<OverlayView.DetectionBox>, targetLabel: String): Pair<OverlayView.DetectionBox, String>? {
         val target = targetLabel.trim()
         if (target.isBlank()) return null
 
         if (target == TARGET_ANY) {
-            return detections.filter { it.confidence >= TARGET_CONFIDENCE_THRESHOLD }.maxByOrNull { it.confidence }
+            val box = detections.filter { it.confidence >= TARGET_CONFIDENCE_THRESHOLD }.maxByOrNull { it.confidence }
+                ?: return null
+            return box to box.label
         }
 
         return detections
@@ -513,18 +581,20 @@ class MainActivity : AppCompatActivity() {
                     else -> box.topLabels.find { it.first.trim().equals(target, ignoreCase = true) }?.second?.div(100f)
                 }
                 if (targetConf != null && targetConf >= TARGET_CONFIDENCE_THRESHOLD) {
-                    if (box.label.trim().equals(target, ignoreCase = true)) box
+                    val displayBox = if (box.label.trim().equals(target, ignoreCase = true)) box
                     else box.copy(
                         label = target,
                         confidence = targetConf,
                         topLabels = listOf(target to (targetConf * 100).toInt())
                     )
+                    Pair(displayBox, box.label)
                 } else null
             }
-            .maxByOrNull { it.confidence }
+            .maxByOrNull { it.first.confidence }
     }
 
-    private fun transitionToLocked(box: OverlayView.DetectionBox, imageWidth: Int, imageHeight: Int) {
+    /** @param actualPrimaryLabel 탐지된 1순위 라벨(음성 플로우에서 요청 상품과 비교용). null이면 box.label 사용 */
+    private fun transitionToLocked(box: OverlayView.DetectionBox, imageWidth: Int, imageHeight: Int, actualPrimaryLabel: String? = null) {
         runOnUiThread {
             searchState = SearchState.LOCKED
             lockedTargetLabel = box.label
@@ -544,13 +614,26 @@ class MainActivity : AppCompatActivity() {
                 ttsDetectedPlayed = true
                 speak("객체를 탐지했습니다. 손을 뻗어 잡아주세요.")
             }
-            lastSuccessfulValidationTimeMs = System.currentTimeMillis()
-            startHandGuidanceTTS()
+            binding.yoloxStatus.text = "🔒 고정: ${box.label} (자이로)"
+            binding.handsStatus.text = "📐 자이로: ON"
+            Toast.makeText(this, "타겟 고정 → 자이로 추적 모드", Toast.LENGTH_SHORT).show()
+            if (voiceFlowController?.currentState == VoiceFlowController.VoiceFlowState.SEARCHING_PRODUCT) {
+                cancelSearchTimeout()
+                val requested = voiceSearchTargetLabel
+                val actualLabel = actualPrimaryLabel ?: box.label
+                val isRequestedProduct = requested == null || requested == TARGET_ANY || requested == actualLabel
+                if (isRequestedProduct) {
+                    voiceSearchTargetLabel = null
+                    voiceFlowController?.onSearchComplete(true, actualLabel, box.rect, imageWidth, imageHeight)
+                }
+            }
+            startPositionAnnounce()
         }
     }
 
     private fun transitionToSearching() {
         runOnUiThread {
+            stopPositionAnnounce()
             searchState = SearchState.SEARCHING
             lockedTargetLabel = ""
             pendingLockBox = null
@@ -718,24 +801,28 @@ class MainActivity : AppCompatActivity() {
             val h = bitmap.height
             val inferenceTime = System.currentTimeMillis() - startTime
 
-            // MediaPipe Hands: LIVE_STREAM → 비동기 전달만 하고 즉시 return (블로킹 없음)
-            sendFrameToHands(bitmap, imageProxy.imageInfo.timestamp)
+            // 손 인식: LOCKED일 때만 실행 (occlusion/optical flow용). SEARCHING에서는 파이프라인 비활성화
+            if (searchState == SearchState.LOCKED) {
+                sendFrameToHands(bitmap, imageProxy.imageInfo.timestamp)
+            }
 
             when (searchState) {
                 SearchState.SEARCHING -> {
                     val detections = runYOLOX(bitmap)
-                    val matched = findTargetMatch(detections, getTargetLabel())
-                    if (matched != null && matched.confidence >= TARGET_CONFIDENCE_THRESHOLD) {
-                        // 같은 클래스가 연속 감지됐는지 확인 (잘못된 클래스 방지)
-                        val prev = pendingLockBox
-                        if (prev != null && prev.label == matched.label &&
-                            RectF.intersects(matched.rect, prev.rect)) {
-                            pendingLockCount++
-                            if (pendingLockCount >= LOCK_CONFIRM_FRAMES) {
-                                pendingLockBox = null
-                                pendingLockCount = 0
-                                transitionToLocked(matched, w, h)
-                                frozenBox = matched
+                    val matchResult = findTargetMatch(detections, getTargetLabel())
+                    if (matchResult != null) {
+                        val (matched, actualPrimaryLabel) = matchResult
+                        if (matched.confidence >= TARGET_CONFIDENCE_THRESHOLD) {
+                            // 같은 클래스가 연속 감지됐는지 확인 (잘못된 클래스 방지)
+                            val prev = pendingLockBox
+                            if (prev != null && prev.label == matched.label &&
+                                RectF.intersects(matched.rect, prev.rect)) {
+                                pendingLockCount++
+                                if (pendingLockCount >= LOCK_CONFIRM_FRAMES) {
+                                    pendingLockBox = null
+                                    pendingLockCount = 0
+                                    transitionToLocked(matched, w, h, actualPrimaryLabel)
+                                    frozenBox = matched
                                 frozenImageWidth = w
                                 frozenImageHeight = h
                                 wasOccluded = false
@@ -743,13 +830,14 @@ class MainActivity : AppCompatActivity() {
                                 gyroManager.startTracking(matched.rect, w, h)
                                 lockedFrameCount = 0
                                 validationFailCount = 0
-                                updateFPS()
-                                imageProxy.close()
-                                return
+                                    updateFPS()
+                                    imageProxy.close()
+                                    return
+                                }
+                            } else {
+                                pendingLockBox = matched
+                                pendingLockCount = 1
                             }
-                        } else {
-                            pendingLockBox = matched
-                            pendingLockCount = 1
                         }
                     } else {
                         pendingLockBox = null
@@ -831,9 +919,18 @@ class MainActivity : AppCompatActivity() {
                             val tracked = findTrackedTarget(detections, lockedTargetLabel, frozenBox, minConf)
                             if (tracked != null) {
                                 validationFailCount = 0
+                                // 한 프레임 점프 방지: 현재 박스 70% + YOLOX 30% 블렌딩
                                 lastSuccessfulValidationTimeMs = System.currentTimeMillis()
-                                gyroManager.correctPosition(tracked.rect)
-                                frozenBox = tracked.copy(rotationDegrees = 0f)
+                                val cur = frozenBox?.rect ?: tracked.rect
+                                val blend = 0.7f
+                                val blendedRect = RectF(
+                                    cur.left * blend + tracked.rect.left * (1f - blend),
+                                    cur.top * blend + tracked.rect.top * (1f - blend),
+                                    cur.right * blend + tracked.rect.right * (1f - blend),
+                                    cur.bottom * blend + tracked.rect.bottom * (1f - blend)
+                                )
+                                gyroManager.correctPosition(blendedRect)
+                                frozenBox = tracked.copy(rect = blendedRect, rotationDegrees = 0f)
                                 frozenImageWidth = w
                                 frozenImageHeight = h
                             } else {
@@ -866,8 +963,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 화면이 거의 안 보일 정도로 어두우면 true (손으로 가림 등) */
-    private fun isImageTooDark(bitmap: Bitmap, threshold: Int = 35): Boolean {
+    /** 화면이 거의 안 보일 정도로 어두우면 true (손으로 가림 등). threshold 낮을수록 어두운 이미지도 처리 */
+    private fun isImageTooDark(bitmap: Bitmap, threshold: Int = 28): Boolean {
         val w = bitmap.width
         val h = bitmap.height
         if (w == 0 || h == 0) return true
@@ -1274,7 +1371,9 @@ class MainActivity : AppCompatActivity() {
     ) {
         runOnUiThread {
             binding.overlayView.setDetections(detections, imageWidth, imageHeight)
-            binding.overlayView.setHands(latestHandsResult.get())
+            binding.overlayView.setHands(
+                if (searchState == SearchState.LOCKED) latestHandsResult.get() else null
+            )
 
             if (!waitingForYesNo) {
                 when (searchState) {
@@ -1321,12 +1420,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        speechRecognizer?.destroy()
-        tts?.stop()
-        tts?.shutdown()
+        cancelSearchTimeout()
+        stopPositionAnnounce()
         cameraExecutor.shutdown()
         yoloxInterpreter?.close()
         gpuDelegate?.close()
+        gyroManager.stopTracking()
+        sttManager?.release()
+        ttsManager?.release()
+        beepPlayer?.release()
         handLandmarker?.close()
         if (::gyroManager.isInitialized) gyroManager.stopTracking()
     }

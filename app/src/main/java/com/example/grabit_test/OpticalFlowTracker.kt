@@ -35,6 +35,10 @@ class OpticalFlowTracker {
     private val minDistance = 15.0
     /** 흐름 추적에 사용할 최소 유효점 비율 */
     private val minValidRatio = 0.3f
+    /** 원본 픽셀 기준: 이 크기 미만 이동은 노이즈로 무시 (0 반환) */
+    private val noiseThresholdPx = 4f
+    /** IQR 이상치 제거: Q1 - k*IQR ~ Q3 + k*IQR 밖이면 제외 */
+    private val iqrK = 1.5f
     /** 처리용 축소 크기 (속도 최적화) */
     private val processWidth = 320
     private val processHeight = 240
@@ -134,16 +138,27 @@ class OpticalFlowTracker {
                 mask.release()
 
                 if (validDx.size < (prevArr.size * minValidRatio)) {
-                    // 유효점 부족 → 다음 프레임에서 재초기화
                     isInitialized = false
                     prevPts?.release()
                     prevPts = null
                     null
                 } else {
-                    val medDx = median(validDx)
-                    val medDy = median(validDy)
-                    // 원본 해상도로 스케일
-                    Pair(medDx * scaleX, medDy * scaleY)
+                    // IQR로 이상치 제거 후 median
+                    val (dxList, dyList) = filterOutliersIqr(validDx, validDy)
+                    if (dxList.size < (validDx.size * 0.5f)) {
+                        null
+                    } else {
+                        val medDx = median(dxList)
+                        val medDy = median(dyList)
+                        val scaledDx = medDx * scaleX
+                        val scaledDy = medDy * scaleY
+                        // 아주 작은 이동은 노이즈로 무시
+                        if (kotlin.math.abs(scaledDx) < noiseThresholdPx && kotlin.math.abs(scaledDy) < noiseThresholdPx) {
+                            null
+                        } else {
+                            Pair(scaledDx, scaledDy)
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -192,6 +207,33 @@ class OpticalFlowTracker {
         val mid = sorted.size / 2
         return if (sorted.size % 2 == 1) sorted[mid]
         else (sorted[mid - 1] + sorted[mid]) / 2f
+    }
+
+    /** IQR 기반 이상치 제거: (dx, dy) 쌍 중 dx 또는 dy가 IQR 범위 밖이면 제외 */
+    private fun filterOutliersIqr(dxList: List<Float>, dyList: List<Float>): Pair<List<Float>, List<Float>> {
+        if (dxList.size != dyList.size || dxList.size < 4) return dxList to dyList
+        fun bounds(list: List<Float>): Pair<Float, Float> {
+            val sorted = list.sorted()
+            val q1 = sorted[sorted.size / 4]
+            val q3 = sorted[(3 * sorted.size) / 4]
+            val iqr = (q3 - q1).coerceAtLeast(1e-6f)
+            val lo = q1 - iqrK * iqr
+            val hi = q3 + iqrK * iqr
+            return lo to hi
+        }
+        val (dxLo, dxHi) = bounds(dxList)
+        val (dyLo, dyHi) = bounds(dyList)
+        val outDx = mutableListOf<Float>()
+        val outDy = mutableListOf<Float>()
+        for (i in dxList.indices) {
+            val dx = dxList[i]
+            val dy = dyList[i]
+            if (dx in dxLo..dxHi && dy in dyLo..dyHi) {
+                outDx.add(dx)
+                outDy.add(dy)
+            }
+        }
+        return outDx to outDy
     }
 
     fun reset() {

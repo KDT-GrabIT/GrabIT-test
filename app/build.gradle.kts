@@ -27,12 +27,6 @@ android {
         }
     }
 
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
@@ -44,6 +38,14 @@ android {
 
     buildFeatures {
         viewBinding = true
+    }
+
+    // 16KB 호환: AGP 8.5.1+ 미만에서 번들→APK 변환 시 사용
+    // AGP 8.5.2 사용 시 기본 16KB zip 정렬 적용됨
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 

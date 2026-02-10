@@ -14,7 +14,7 @@ import kotlin.math.abs
 private const val NS2S = 1.0f / 1_000_000_000f
 private const val MIN_ROTATION_THRESHOLD = 0.02f
 private const val SENSITIVITY_FACTOR = 0.8f
-private const val SMOOTHING_ALPHA = 0.15f
+private const val SMOOTHING_ALPHA = 0.25f  // 0.15→0.25: 떨림 감소
 
 /** 가속도 데드존: 0.1 미만은 노이즈로 무시 */
 private const val ACCEL_DEADZONE = 0.1f
@@ -22,10 +22,14 @@ private const val ACCEL_DEADZONE = 0.1f
 private const val VELOCITY_DAMPING = 0.8f
 /** 물체까지 거리 가정 (팔 뻗은 거리, m) */
 private const val ASSUMED_DISTANCE_M = 0.5f
+/** 가속도 병진 반영 비중 (1.0=전부, 0.4=드리프트 억제) */
+private const val TRANSLATION_WEIGHT = 0.4f
 /** 화면 밖 허용 여유(px): 이 정도까지 벗어나도 바로 해제하지 않음 */
 private const val OUT_OF_BOUNDS_MARGIN = 150f
 /** 연속 N프레임 화면 밖이어야 고정 해제 (노이즈로 인한 급격한 해제 방지) */
 private const val OUT_OF_BOUNDS_FRAMES_TO_LOSE = 15
+/** 자이로 워밍업: 이 시간(ms) 동안은 센서 보정 없이 고정 위치 유지 */
+private const val GYRO_WARMUP_MS = 500L
 
 /** 회전 적용한 박스 업데이트: rect + 화면 롤(옆으로 눕힌 각도, 도) */
 data class BoxUpdate(val rect: RectF, val rotationDegrees: Float)
@@ -49,6 +53,7 @@ class GyroTrackingManager(
     /** occlusion 시 optical flow 사용 → true면 onBoxUpdate 호출 안 함 */
     var suspendUpdates = false
     private var timestamp: Long = 0
+    private var startTrackingWallTimeMs: Long = 0
     private var outOfBoundsCount = 0
     private var smoothedRollDegrees = 0f
 
@@ -84,6 +89,7 @@ class GyroTrackingManager(
 
         isLocked = true
         timestamp = 0
+        startTrackingWallTimeMs = System.currentTimeMillis()
         outOfBoundsCount = 0
         smoothedRollDegrees = 0f
 
@@ -209,13 +215,22 @@ class GyroTrackingManager(
         val deltaRollDegrees = Math.toDegrees(deltaRoll.toDouble()).toFloat()
         smoothedRollDegrees += (deltaRollDegrees - smoothedRollDegrees) * SMOOTHING_ALPHA
 
-        val rotationShiftX = deltaYaw * pixelsPerRadianX * SENSITIVITY_FACTOR
+        // 카메라 오른쪽 회전(양 yaw) → 물체는 화면에서 왼쪽으로 이동하므로 부호 반전
+        // 워밍업: 시작 직후 센서가 불안정해 박스가 밀리지 않도록 Nms 동안 보정 스킵
+        val elapsedMs = System.currentTimeMillis() - startTrackingWallTimeMs
+        if (elapsedMs < GYRO_WARMUP_MS) {
+            val update = BoxUpdate(currentSmoothedRect, -smoothedRollDegrees)
+            if (!suspendUpdates) onBoxUpdate(update)
+            return
+        }
+
+        val rotationShiftX = -deltaYaw * pixelsPerRadianX * SENSITIVITY_FACTOR
         val rotationShiftY = deltaPitch * pixelsPerRadianY * SENSITIVITY_FACTOR
 
         val pixelsPerMeterX = pixelsPerRadianX / ASSUMED_DISTANCE_M
         val pixelsPerMeterY = pixelsPerRadianY / ASSUMED_DISTANCE_M
-        val translationShiftX = distanceX * pixelsPerMeterX
-        val translationShiftY = distanceY * pixelsPerMeterY
+        val translationShiftX = distanceX * pixelsPerMeterX * TRANSLATION_WEIGHT
+        val translationShiftY = distanceY * pixelsPerMeterY * TRANSLATION_WEIGHT
 
         val targetX = initialRect.left + rotationShiftX - translationShiftX
         val targetY = initialRect.top + rotationShiftY - translationShiftY
