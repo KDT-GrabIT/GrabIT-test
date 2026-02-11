@@ -55,6 +55,7 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.drawerlayout:drawerlayout:1.2.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 
     // 1. MediaPipe 0.10.26 (16KB 지원)
     implementation("com.google.mediapipe:tasks-vision:0.10.26")
@@ -71,4 +72,10 @@ dependencies {
 
     // 4. OpenCV 4.12.0 (16KB 페이지 호환, 4.9.0은 미지원)
     implementation("org.opencv:opencv:4.12.0")
+
+    // 5. MongoDB/백엔드 API 호출 (유의어·근접단어)
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

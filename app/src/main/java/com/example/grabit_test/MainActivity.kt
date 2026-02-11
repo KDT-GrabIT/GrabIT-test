@@ -40,6 +40,11 @@ import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import android.os.Handler
 import android.os.Looper
+import com.example.grabitTest.data.synonym.SynonymRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
@@ -169,6 +174,7 @@ class MainActivity : AppCompatActivity() {
 
         loadClassLabels()
         ProductDictionary.load(this)
+        loadSynonymFromRemote()
         initYOLOX()
         initMediaPipeHands()
         setupTargetSpinner()
@@ -191,6 +197,16 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(
                 this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
             )
+        }
+    }
+
+    /** 앱 시작 시 MongoDB(백엔드)에서 대답/상품 근접단어 로드. API 키 설정 시에만 호출됨. */
+    private fun loadSynonymFromRemote() {
+        CoroutineScope(Dispatchers.Main).launch {
+            withContext(Dispatchers.IO) {
+                SynonymRepository.loadFromRemote()
+            }
+            Log.d(TAG, "SynonymRepository 로드 완료: success=${SynonymRepository.lastLoadSuccess()}")
         }
     }
 
@@ -474,6 +490,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun mapSpokenToClass(spoken: String): String {
         if (spoken.isBlank()) return ""
+        SynonymRepository.findClassByProximity(spoken)?.let { return it }
         ProductDictionary.findClassByStt(spoken)?.let { return it }
         val s = spoken.trim().lowercase().replace(" ", "")
         for (label in classLabels) {

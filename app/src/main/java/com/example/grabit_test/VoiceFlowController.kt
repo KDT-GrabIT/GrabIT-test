@@ -3,6 +3,7 @@ package com.example.grabitTest
 import android.graphics.RectF
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import com.example.grabitTest.data.synonym.SynonymRepository
 
 /**
  * 시각장애인을 위한 음성 인터랙션 상태 머신
@@ -146,6 +147,9 @@ class VoiceFlowController(
     }
 
     private fun isConfirmationYes(text: String): Boolean {
+        if (SynonymRepository.isLoaded()) {
+            return SynonymRepository.isYesAnswer(text)
+        }
         val t = text.trim().lowercase().replace(" ", "")
         return t.contains("예") || t.contains("네") || t.contains("맞") || t.contains("응") ||
             t == "yes" || t == "y" || t.contains("그래") || t.contains("좋아")
