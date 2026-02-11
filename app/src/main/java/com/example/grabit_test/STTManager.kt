@@ -87,6 +87,9 @@ class STTManager(
         try {
             if (isListening) sr.stopListening()
         } catch (_: Exception) {}
+        try {
+            sr.cancel()
+        } catch (_: Exception) {}
         isListening = false
         onListeningChanged(false)
         audioManager?.let { am ->

@@ -139,9 +139,11 @@ class MainActivity : AppCompatActivity() {
     private var ttsGrabbedPlayed = false   // 객체 잡았음 TTS 1회만
     private var ttsAskAnotherPlayed = false
     private var waitingForTouchConfirm = false  // (단순화 후 사용 안 함)
-    /** 터치 확인("상품에 닿았나요?") STT NO_MATCH/타임아웃 시 재시도 횟수 — 맞습니까와 동일하게 1회 재시도 */
+    /** STT NO_MATCH/타임아웃 시 "다시 말해주세요" TTS 후 재시도 횟수 (이 횟수만큼 반복) */
+    private val STT_MAX_RETRIES = 3
+    /** 터치 확인("상품에 닿았나요?") STT 재시도 카운트 */
     private var touchConfirmSttRetryCount = 0
-    /** 상품명/맞습니까 대기 시 NO_MATCH·타임아웃 1회 재시도 (바로 "화면 터치" 안 내보냄) */
+    /** 상품명/맞습니까 대기 시 STT 재시도 카운트 */
     private var voiceFlowSttRetryCount = 0
     private var handsOverlapFrameCount = 0  // 손-박스 겹침 연속 프레임 수 (잘못된 잡기 판정용)
     private var pinchGrabFrameCount = 0     // 엄지+검지 잡기 판정 연속 프레임
@@ -480,49 +482,76 @@ class MainActivity : AppCompatActivity() {
                         errorCode == android.speech.SpeechRecognizer.ERROR_NO_MATCH ||
                             errorCode == android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT
 
-                    // 터치 확인("상품에 닿았나요?") — 맞습니까와 동일하게 NO_MATCH/타임아웃 시 1회 재시도 후 실패 처리
+                    // 터치 확인("상품에 닿았나요?") — 매 실패마다 오류 TTS → "다시 말해주세요" → 재시도. 포기 시에는 오류 TTS 없이 화면만 갱신
                     if (waitingForTouchConfirm && isNoMatchOrTimeout) {
-                        if (touchConfirmSttRetryCount < 1) {
+                        if (touchConfirmSttRetryCount < STT_MAX_RETRIES) {
                             touchConfirmSttRetryCount++
-                            binding.systemMessageText.text = "다시 말해주세요."
+                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
                             Log.d("STT", "MainActivity: touch confirm STT retry (no_match/timeout) count=$touchConfirmSttRetryCount")
-                            binding.root.postDelayed({
-                                if (!waitingForTouchConfirm) return@postDelayed
-                                sttManager?.startListening()
-                            }, 500L)
+                            speak("$msg") {
+                                runOnUiThread {
+                                    speak("다시 말해주세요.") {
+                                        runOnUiThread {
+                                            binding.root.postDelayed({
+                                                if (!waitingForTouchConfirm) return@postDelayed
+                                                Log.d("STT", "MainActivity: touch confirm retry → startListening() (삐 후 재시도)")
+                                                sttManager?.startListening()
+                                            }, 800L)
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             touchConfirmSttRetryCount = 0
                             waitingForTouchConfirm = false
-                            binding.systemMessageText.text = "손을 뻗어 잡아주세요"
+                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
                             binding.statusText.text = "손을 뻗어 잡아주세요"
                             touchActive = false
                             startPositionAnnounce()
-                            Toast.makeText(this, "음성 인식 실패. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                            speak("$msg") {
+                                speak("화면을 터치해서 다시 시작해주세요.") {
+                                    runOnUiThread {
+                                        Toast.makeText(this, "음성 인식 실패. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         }
                         return@runOnUiThread
                     }
 
                     val state = voiceFlowController?.currentState
 
-                    // 상품명/맞습니까 대기 상태: NO_MATCH·타임아웃 시 마지막 부분 인식 표시 후 1회 재시도, 그래도 실패 시에만 "화면 터치"
+                    // 상품명/맞습니까 대기 상태: 매 실패마다 오류 TTS → "다시 말해주세요" → 재시도. 포기 시에는 오류 TTS 없이 터치 안내만
                     if (isNoMatchOrTimeout &&
                         (state == VoiceFlowController.VoiceFlowState.WAITING_PRODUCT_NAME ||
                                 state == VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION)
                     ) {
                         val lastPartial = sttManager?.getLastPartialText()?.takeIf { it.isNotBlank() }
                         if (!lastPartial.isNullOrBlank()) binding.userSpeechText.text = lastPartial
-                        if (voiceFlowSttRetryCount < 1) {
+                        if (voiceFlowSttRetryCount < STT_MAX_RETRIES) {
                             voiceFlowSttRetryCount++
-                            binding.systemMessageText.text = "다시 말해주세요."
+                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
                             Log.d("STT", "MainActivity: voice flow STT retry (no_match/timeout) count=$voiceFlowSttRetryCount")
-                            binding.root.postDelayed({
-                                sttManager?.startListening()
-                            }, 500L)
+                            speak("$msg") {
+                                runOnUiThread {
+                                    speak("다시 말해주세요.") {
+                                        runOnUiThread {
+                                            binding.root.postDelayed({
+                                                Log.d("STT", "MainActivity: voice flow retry → startListening() (삐 후 재시도)")
+                                                sttManager?.startListening()
+                                            }, 800L)
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             voiceFlowSttRetryCount = 0
-                            speak(VoicePrompts.PROMPT_TOUCH_RESTART) {
-                                voiceFlowController?.start()
-                                showFirstScreen()
+                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
+                            speak("$msg") {
+                                speak(VoicePrompts.PROMPT_TOUCH_RESTART) {
+                                    voiceFlowController?.start()
+                                    showFirstScreen()
+                                }
                             }
                         }
                         return@runOnUiThread
@@ -621,9 +650,12 @@ class MainActivity : AppCompatActivity() {
     private fun onStartSearchFromVoiceFlow(productName: String) {
         val targetClass = mapSpokenToClass(productName)
         if (productName.isNotBlank() && targetClass.isBlank()) {
-            speak(VoicePrompts.PROMPT_PRODUCT_RECOGNITION_FAILED)
-            // 음성으로 다시 받지 않고, 터치로 재시작만 허용
             voiceSearchTargetLabel = null
+            val failReason = "인식된 말을 상품 목록에서 찾지 못했어요. '$productName'"
+            binding.systemMessageText.text = "상품 매칭 실패: '$productName'(을)를 찾지 못했어요."
+            speak(failReason) {
+                speak(VoicePrompts.PROMPT_PRODUCT_RECOGNITION_FAILED) { }
+            }
             return
         }
         cancelSearchTimeout()
