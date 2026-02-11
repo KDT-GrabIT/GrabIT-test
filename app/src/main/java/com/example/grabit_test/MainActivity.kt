@@ -154,6 +154,11 @@ class MainActivity : AppCompatActivity() {
     /** 키 반복(KEY_DOWN 연속) 시 runnable 중복 등록 방지 */
     private var volumeUpKeyDownScheduled = false
 
+    /** 볼륨 다운 길게 누르기 → TTS 중지 후 바로 음성인식(STT) 시작 */
+    private var volumeDownLongPressRunnable: Runnable? = null
+    private var volumeDownLongPressFired = false
+    private var volumeDownKeyDownScheduled = false
+
     // ---------- near-contact(touch) 판정 (시각장애인 UX, 현장 튜닝 포인트) ----------
     /** 타겟 박스 확장 비율. 확장된 박스 안에 엄지·검지 중간점이 있으면 touch (넓을수록 잡기 판정 수월) */
     private val TOUCH_BOX_EXPAND_RATIO = 0.22f
@@ -301,27 +306,57 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode != KeyEvent.KEYCODE_VOLUME_UP) return super.dispatchKeyEvent(event)
-        when (event.action) {
-            KeyEvent.ACTION_DOWN -> {
-                if (volumeUpKeyDownScheduled) return true
-                volumeUpKeyDownScheduled = true
-                volumeUpLongPressFired = false
-                volumeUpLongPressRunnable = Runnable {
-                    volumeUpLongPressFired = true
-                    runOnUiThread { onFirstScreenClicked() }
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> {
+                when (event.action) {
+                    KeyEvent.ACTION_DOWN -> {
+                        if (volumeUpKeyDownScheduled) return true
+                        volumeUpKeyDownScheduled = true
+                        volumeUpLongPressFired = false
+                        volumeUpLongPressRunnable = Runnable {
+                            volumeUpLongPressFired = true
+                            runOnUiThread { onFirstScreenClicked() }
+                        }
+                        volumeLongPressHandler.postDelayed(volumeUpLongPressRunnable!!, VOLUME_LONG_PRESS_MS)
+                        return true
+                    }
+                    KeyEvent.ACTION_UP -> {
+                        volumeUpKeyDownScheduled = false
+                        volumeLongPressHandler.removeCallbacks(volumeUpLongPressRunnable ?: return true)
+                        if (!volumeUpLongPressFired) {
+                            (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                                ?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
+                        }
+                        return true
+                    }
                 }
-                volumeLongPressHandler.postDelayed(volumeUpLongPressRunnable!!, VOLUME_LONG_PRESS_MS)
-                return true
             }
-            KeyEvent.ACTION_UP -> {
-                volumeUpKeyDownScheduled = false
-                volumeLongPressHandler.removeCallbacks(volumeUpLongPressRunnable ?: return true)
-                if (!volumeUpLongPressFired) {
-                    (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
-                        ?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
+            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                when (event.action) {
+                    KeyEvent.ACTION_DOWN -> {
+                        if (volumeDownKeyDownScheduled) return true
+                        volumeDownKeyDownScheduled = true
+                        volumeDownLongPressFired = false
+                        volumeDownLongPressRunnable = Runnable {
+                            volumeDownLongPressFired = true
+                            runOnUiThread {
+                                ttsManager?.stop()
+                                sttManager?.startListening()
+                            }
+                        }
+                        volumeLongPressHandler.postDelayed(volumeDownLongPressRunnable!!, VOLUME_LONG_PRESS_MS)
+                        return true
+                    }
+                    KeyEvent.ACTION_UP -> {
+                        volumeDownKeyDownScheduled = false
+                        volumeLongPressHandler.removeCallbacks(volumeDownLongPressRunnable ?: return true)
+                        if (!volumeDownLongPressFired) {
+                            (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                                ?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
+                        }
+                        return true
+                    }
                 }
-                return true
             }
         }
         return super.dispatchKeyEvent(event)
