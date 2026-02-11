@@ -146,6 +146,9 @@ class STTManager(
 
     fun isListening(): Boolean = isListening
 
+    /** NO_MATCH/타임아웃 전 마지막 부분 인식 텍스트 (사용자에게 뭐가 들렸는지 보여주기용) */
+    fun getLastPartialText(): String? = lastPartialText
+
     fun release() {
         try {
             speechRecognizer?.destroy()
