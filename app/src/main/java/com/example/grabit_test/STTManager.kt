@@ -15,7 +15,7 @@ import java.util.Locale
 
 /**
  * Android SpeechRecognizer 기반 STT(음성→텍스트) 매니저
- * beepPlayer와 speakPrompt를 주입하면 startListening() 시: "삐 소리가 나면 말씀해주세요" (TTS) → 삐 → 음성녹음 시작.
+ * beepPlayer를 주입하면 startListening() 시 삐 소리만 재생 후 음성녹음 시작.
  */
 class STTManager(
     private val context: Context,
@@ -24,12 +24,10 @@ class STTManager(
     private val onErrorWithCode: ((String, Int) -> Unit)? = null,
     private val onListeningChanged: (Boolean) -> Unit = {},
     private val onPartialResult: ((String) -> Unit)? = null,
-    private val beepPlayer: BeepPlayer? = null,
-    private val speakPrompt: ((String, () -> Unit) -> Unit)? = null
+    private val beepPlayer: BeepPlayer? = null
 ) {
     companion object {
         private const val TAG = "STT"
-        private const val DEFAULT_PROMPT = "삐 소리가 나면 말씀해주세요."
     }
 
     private var speechRecognizer: SpeechRecognizer? = null
@@ -58,7 +56,7 @@ class STTManager(
     }
     
     /**
-     * 음성 인식 시작. beepPlayer/speakPrompt가 있으면: "삐 소리가 나면 말씀해주세요" (TTS) → 삐 → 음성녹음 시작.
+     * 음성 인식 시작. beepPlayer가 있으면 삐 소리만 재생 후 음성녹음 시작.
      */
     fun startListening() {
         val sr = speechRecognizer
@@ -74,12 +72,10 @@ class STTManager(
             onError("마이크 권한이 필요합니다.")
             return
         }
-        if (beepPlayer != null && speakPrompt != null) {
-            Log.d(TAG, "STT_START → prompt → beep → doStartListening")
-            speakPrompt?.invoke(DEFAULT_PROMPT) {
-                beepPlayer?.playBeep {
-                    doStartListening()
-                }
+        if (beepPlayer != null) {
+            Log.d(TAG, "STT_START → beep → doStartListening")
+            beepPlayer.playBeep {
+                doStartListening()
             }
         } else {
             doStartListening()

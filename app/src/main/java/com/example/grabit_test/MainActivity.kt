@@ -407,10 +407,7 @@ class MainActivity : AppCompatActivity() {
                     binding.sttResultText.text = "🎤 인식 중: $text"
                 }
             },
-            beepPlayer = beepPlayer,
-            speakPrompt = { prompt, onDone ->
-                ttsManager?.speak(prompt, TextToSpeech.QUEUE_FLUSH, onDone) ?: onDone()
-            }
+            beepPlayer = beepPlayer
         ).also { if (it.init()) Log.d(TAG, "STT 초기화 완료") }
     }
 
