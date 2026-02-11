@@ -1,8 +1,10 @@
 package com.example.grabitTest
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -12,6 +14,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -143,6 +146,14 @@ class MainActivity : AppCompatActivity() {
     /** near-contact 후 질문(STT) 플로우가 이미 진행 중인지 여부 (중복 트리거 방지) */
     private var touchConfirmInProgress = false
 
+    /** 볼륨 업 길게 누르기 → 재시작. 짧게 누르면 볼륨만 조정 */
+    private val VOLUME_LONG_PRESS_MS = 600L
+    private val volumeLongPressHandler = Handler(Looper.getMainLooper())
+    private var volumeUpLongPressRunnable: Runnable? = null
+    private var volumeUpLongPressFired = false
+    /** 키 반복(KEY_DOWN 연속) 시 runnable 중복 등록 방지 */
+    private var volumeUpKeyDownScheduled = false
+
     // ---------- near-contact(touch) 판정 (시각장애인 UX, 현장 튜닝 포인트) ----------
     /** 타겟 박스 확장 비율. 확장된 박스 안에 엄지·검지 중간점이 있으면 touch (넓을수록 잡기 판정 수월) */
     private val TOUCH_BOX_EXPAND_RATIO = 0.22f
@@ -175,7 +186,6 @@ class MainActivity : AppCompatActivity() {
         initGyroTrackingManager()
         initSttTts()
 
-        binding.firstScreen.setOnClickListener { onFirstScreenClicked() }
         binding.resetBtn.setOnClickListener { gyroManager.resetToSearchingFromUI() }
         binding.btnFirstScreen.setOnClickListener { goToFirstScreen() }
         setupProductDrawer()
@@ -285,8 +295,35 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "준비 중입니다. 잠시 후 다시 터치해주세요.", Toast.LENGTH_SHORT).show()
             return
         }
-        // 화면 터치 시에만 마이크 켜고 상품명 입력 받기
+        // 볼륨 업 길게 누르기 시 마이크 켜고 상품명 입력 받기
         voiceFlowController?.startProductNameInput()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_VOLUME_UP) return super.dispatchKeyEvent(event)
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (volumeUpKeyDownScheduled) return true
+                volumeUpKeyDownScheduled = true
+                volumeUpLongPressFired = false
+                volumeUpLongPressRunnable = Runnable {
+                    volumeUpLongPressFired = true
+                    runOnUiThread { onFirstScreenClicked() }
+                }
+                volumeLongPressHandler.postDelayed(volumeUpLongPressRunnable!!, VOLUME_LONG_PRESS_MS)
+                return true
+            }
+            KeyEvent.ACTION_UP -> {
+                volumeUpKeyDownScheduled = false
+                volumeLongPressHandler.removeCallbacks(volumeUpLongPressRunnable ?: return true)
+                if (!volumeUpLongPressFired) {
+                    (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                        ?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
+                }
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun initSttTts() {
