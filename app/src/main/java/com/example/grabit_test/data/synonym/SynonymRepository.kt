@@ -40,7 +40,6 @@ object SynonymRepository {
     suspend fun loadFromRemote() = withContext(Dispatchers.IO) {
         loadDefaultAnswers()
         if (!MongoConfig.isApiConfigured()) {
-            Log.d(TAG, "API 미설정: 기본 대답 목록만 사용")
             lastLoadSuccess = true
             return@withContext
         }
@@ -51,7 +50,6 @@ object SynonymRepository {
             mergeAnswerDocs(answers.items)
             mergeProductDocs(products.items)
             lastLoadSuccess = true
-            Log.d(TAG, "원격 로드 완료: answer=${answerProximityCache.size}, product=${productProximityCache.size}")
         } catch (e: Exception) {
             Log.e(TAG, "원격 로드 실패, 기본값 유지", e)
             lastLoadSuccess = false

@@ -54,7 +54,6 @@ class BeepPlayer {
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
             audioTrack?.write(buffer, 0, buffer.size)
-            Log.d(TAG, "BeepPlayer 초기화 완료 (삐~~~~ ${BEEP_DURATION_MS}ms)")
             true
         } catch (e: Exception) {
             Log.e(TAG, "BeepPlayer 초기화 실패", e)
@@ -94,7 +93,6 @@ class BeepPlayer {
             audioTrack?.release()
             audioTrack = null
             handler.removeCallbacksAndMessages(null)
-            Log.d(TAG, "BeepPlayer 해제")
         } catch (e: Exception) {
             Log.e(TAG, "release 실패", e)
         }

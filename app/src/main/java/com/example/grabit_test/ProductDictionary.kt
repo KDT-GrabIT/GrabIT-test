@@ -59,7 +59,6 @@ object ProductDictionary {
 
                 mapByClass = byClass
                 aliasToClass = byAlias
-                Log.d(TAG, "로드 완료: ${mapByClass.size}개 상품")
                 true
             }
         } catch (e: Exception) {

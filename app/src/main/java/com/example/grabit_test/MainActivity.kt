@@ -145,6 +145,8 @@ class MainActivity : AppCompatActivity() {
     private var touchConfirmSttRetryCount = 0
     /** 상품명/맞습니까 대기 시 STT 재시도 카운트 */
     private var voiceFlowSttRetryCount = 0
+    /** 확인 대기("맞습니까? 예라고 말해주세요") 단계에서 NO_MATCH 시 TTS 없이 재청취 횟수 */
+    private var voiceConfirmSilentRetryCount = 0
     private var handsOverlapFrameCount = 0  // 손-박스 겹침 연속 프레임 수 (잘못된 잡기 판정용)
     private var pinchGrabFrameCount = 0     // 엄지+검지 잡기 판정 연속 프레임
 
@@ -159,6 +161,8 @@ class MainActivity : AppCompatActivity() {
     private val REACQUIRE_INFERENCE_AFTER_MS = 2000L
     /** near-contact 후 질문(STT) 플로우가 이미 진행 중인지 여부 (중복 트리거 방지) */
     private var touchConfirmInProgress = false
+    /** analyzer에서 enterTouchConfirm을 큐에 넣었으면 true. UI에서 실행되기 전 다음 프레임이 또 넣는 것 방지 */
+    private var touchConfirmScheduled = false
 
     /** 볼륨 업 길게 누르기 → 재시작. 짧게 누르면 볼륨만 조정 */
     private val VOLUME_LONG_PRESS_MS = 600L
@@ -242,7 +246,6 @@ class MainActivity : AppCompatActivity() {
             withContext(Dispatchers.IO) {
                 SynonymRepository.loadFromRemote()
             }
-            Log.d(TAG, "SynonymRepository 로드 완료: success=${SynonymRepository.lastLoadSuccess()}")
         }
     }
 
@@ -406,7 +409,7 @@ class MainActivity : AppCompatActivity() {
     private fun initSttTts() {
         ttsManager = TTSManager(
             context = this,
-            onReady = { Log.d(TAG, "TTS 준비 완료") },
+            onReady = { },
             onSpeakDone = { },
             onError = { msg ->
                 runOnUiThread {
@@ -425,16 +428,12 @@ class MainActivity : AppCompatActivity() {
                         onStateChanged = { _, _ -> runOnUiThread { updateVoiceFlowButtonVisibility() } },
                         onSystemAnnounce = { msg -> runOnUiThread { binding.systemMessageText.text = msg } },
                         onRequestStartStt = {
-                    runOnUiThread {
-                        Log.d("STT", "MainActivity: onRequestStartStt() → startListening() (0ms)")
-                        sttManager?.startListening()
-                    }
+                    runOnUiThread { sttManager?.startListening() }
                 },
                         onStartSearch = { productName -> runOnUiThread { onStartSearchFromVoiceFlow(productName) } },
                         onProductNameEntered = { productName -> runOnUiThread { setTargetFromSpokenProductName(productName) } }
                     )
                     voiceFlowController?.start()
-                    Log.d(TAG, "VoiceFlowController 시작")
                     // 첫 화면일 때만 시작 안내 TTS (화면 터치해서 상품찾기 시작해주세요)
                     if (screenState == ScreenState.FIRST_SCREEN) playWelcomeTTS()
                 } else {
@@ -447,21 +446,21 @@ class MainActivity : AppCompatActivity() {
             context = this,
             onResult = { text ->
                 runOnUiThread {
-                    Log.d(TAG, "[STT 결과] $text")
                     binding.userSpeechText.text = text
-                    // [예 말하기 공통] 1. 찾는 상품 확인 → voiceFlowController 2. 객체 잡았나요 → handleTouchConfirmYesNo. 둘 다 동시 적용.
                     if (waitingForTouchConfirm) {
                         waitingForTouchConfirm = false
                         handleTouchConfirmYesNo(text)
                         return@runOnUiThread
                     }
                     voiceFlowSttRetryCount = 0
+                    if (voiceFlowController?.currentState == VoiceFlowController.VoiceFlowState.WAITING_PRODUCT_NAME) {
+                        voiceConfirmSilentRetryCount = 0  // 상품명 인식 후 확인 대기 단계 진입 시 리셋
+                    }
                     voiceFlowController?.onSttResult(text)
                 }
             },
             onError = { msg ->
                 runOnUiThread {
-                    Log.e(TAG, "[STT 에러] $msg")
                     binding.systemMessageText.text = msg
                     if (waitingForTouchConfirm) {
                         waitingForTouchConfirm = false
@@ -477,100 +476,98 @@ class MainActivity : AppCompatActivity() {
             },
             onErrorWithCode = { msg, errorCode ->
                 runOnUiThread {
-                    Log.e(TAG, "[STT onErrorWithCode] code=$errorCode, msg=$msg")
+                    val state = voiceFlowController?.currentState
                     val isNoMatchOrTimeout =
                         errorCode == android.speech.SpeechRecognizer.ERROR_NO_MATCH ||
                             errorCode == android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT
-
-                    // 터치 확인("상품에 닿았나요?") — 매 실패마다 오류 TTS → "다시 말해주세요" → 재시도. 포기 시에는 오류 TTS 없이 화면만 갱신
-                    if (waitingForTouchConfirm && isNoMatchOrTimeout) {
-                        if (touchConfirmSttRetryCount < STT_MAX_RETRIES) {
-                            touchConfirmSttRetryCount++
-                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
-                            Log.d("STT", "MainActivity: touch confirm STT retry (no_match/timeout) count=$touchConfirmSttRetryCount")
-                            speak("$msg") {
-                                runOnUiThread {
-                                    speak("다시 말해주세요.") {
-                                        runOnUiThread {
-                                            binding.root.postDelayed({
-                                                if (!waitingForTouchConfirm) return@postDelayed
-                                                Log.d("STT", "MainActivity: touch confirm retry → startListening() (삐 후 재시도)")
-                                                sttManager?.startListening()
-                                            }, 800L)
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            touchConfirmSttRetryCount = 0
-                            waitingForTouchConfirm = false
-                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
-                            binding.statusText.text = "손을 뻗어 잡아주세요"
-                            touchActive = false
-                            startPositionAnnounce()
-                            speak("$msg") {
-                                speak("화면을 터치해서 다시 시작해주세요.") {
-                                    runOnUiThread {
-                                        Toast.makeText(this, "음성 인식 실패. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        }
-                        return@runOnUiThread
-                    }
-
-                    val state = voiceFlowController?.currentState
-
-                    // 상품명/맞습니까 대기 상태: 매 실패마다 오류 TTS → "다시 말해주세요" → 재시도. 포기 시에는 오류 TTS 없이 터치 안내만
-                    if (isNoMatchOrTimeout &&
-                        (state == VoiceFlowController.VoiceFlowState.WAITING_PRODUCT_NAME ||
-                                state == VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION)
-                    ) {
-                        val lastPartial = sttManager?.getLastPartialText()?.takeIf { it.isNotBlank() }
-                        if (!lastPartial.isNullOrBlank()) binding.userSpeechText.text = lastPartial
-                        if (voiceFlowSttRetryCount < STT_MAX_RETRIES) {
-                            voiceFlowSttRetryCount++
-                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
-                            Log.d("STT", "MainActivity: voice flow STT retry (no_match/timeout) count=$voiceFlowSttRetryCount")
-                            speak("$msg") {
-                                runOnUiThread {
-                                    speak("다시 말해주세요.") {
-                                        runOnUiThread {
-                                            binding.root.postDelayed({
-                                                Log.d("STT", "MainActivity: voice flow retry → startListening() (삐 후 재시도)")
-                                                sttManager?.startListening()
-                                            }, 800L)
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            voiceFlowSttRetryCount = 0
-                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
-                            speak("$msg") {
-                                speak(VoicePrompts.PROMPT_TOUCH_RESTART) {
-                                    voiceFlowController?.start()
-                                    showFirstScreen()
-                                }
-                            }
-                        }
-                        return@runOnUiThread
-                    }
-
-                    // 그 외에는 RECOGNIZER_BUSY 에 한해 짧게 재시도
-                    val isRetryable = errorCode == android.speech.SpeechRecognizer.ERROR_RECOGNIZER_BUSY
-                    val shouldRetry = isRetryable && (
+                    // 예/아니오 대기 = 터치 확인(상품에 닿았나요?) 또는 상품명/맞습니까 — 공통 처리
+                    val isSttWaiting = waitingForTouchConfirm ||
                         state == VoiceFlowController.VoiceFlowState.WAITING_PRODUCT_NAME ||
-                            state == VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION
-                        )
-                    if (shouldRetry) {
-                        val delayMs = 800L
+                        state == VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION
+
+                    // NO_MATCH / SPEECH_TIMEOUT → 공통 재시도 또는 포기
+                    if (isNoMatchOrTimeout && isSttWaiting) {
+                        val isTouchConfirm = waitingForTouchConfirm
+                        val isVoiceConfirm = state == VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION
+                        val retryCount = when {
+                            isTouchConfirm -> touchConfirmSttRetryCount
+                            else -> voiceFlowSttRetryCount
+                        }
+                        // 터치 확인: 처음 두 번 NO_MATCH는 TTS 없이 재시작 (듣는 중이 빨리 꺼지는 기기/엔진 완화)
+                        if (isTouchConfirm && retryCount < 2) {
+                            touchConfirmSttRetryCount++
+                            binding.root.postDelayed({
+                                if (!waitingForTouchConfirm) return@postDelayed
+                                sttManager?.startListening()
+                            }, 400L)
+                            return@runOnUiThread
+                        }
+                        // 확인 대기("맞습니까? 예라고 말해주세요"): 처음 두 번 NO_MATCH는 TTS 없이 재시작
+                        if (isVoiceConfirm && voiceConfirmSilentRetryCount < 2) {
+                            voiceConfirmSilentRetryCount++
+                            binding.root.postDelayed({
+                                if (voiceFlowController?.currentState != VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION) return@postDelayed
+                                sttManager?.startListening()
+                            }, 400L)
+                            return@runOnUiThread
+                        }
+                        binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
+                        if (!isTouchConfirm) {
+                            val lastPartial = sttManager?.getLastPartialText()?.takeIf { it.isNotBlank() }
+                            if (!lastPartial.isNullOrBlank()) binding.userSpeechText.text = lastPartial
+                        }
+                        if (retryCount < STT_MAX_RETRIES) {
+                            if (isTouchConfirm) touchConfirmSttRetryCount++ else voiceFlowSttRetryCount++
+                            speak("$msg") {
+                                runOnUiThread {
+                                    speak("다시 말해주세요.") {
+                                        runOnUiThread {
+                                            binding.root.postDelayed({
+                                                if (isTouchConfirm && !waitingForTouchConfirm) return@postDelayed
+                                                sttManager?.startListening()
+                                            }, 800L)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            if (isTouchConfirm) {
+                                touchConfirmSttRetryCount = 0
+                                waitingForTouchConfirm = false
+                                binding.statusText.text = "손을 뻗어 잡아주세요"
+                                touchActive = false
+                                startPositionAnnounce()
+                            } else {
+                                voiceFlowSttRetryCount = 0
+                                voiceConfirmSilentRetryCount = 0
+                            }
+                            speak("$msg") {
+                                if (isTouchConfirm) {
+                                    speak("화면을 터치해서 다시 시작해주세요.") {
+                                        runOnUiThread {
+                                            Toast.makeText(this, "음성 인식 실패. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else {
+                                    speak(VoicePrompts.PROMPT_TOUCH_RESTART) {
+                                        voiceFlowController?.start()
+                                        showFirstScreen()
+                                    }
+                                }
+                            }
+                        }
+                        return@runOnUiThread
+                    }
+
+                    // RECOGNIZER_BUSY → 상품명/맞습니까 대기 중일 때만 재시도 (터치 확인은 제외)
+                    val isRetryable = errorCode == android.speech.SpeechRecognizer.ERROR_RECOGNIZER_BUSY
+                    val isVoiceFlowWaiting = state == VoiceFlowController.VoiceFlowState.WAITING_PRODUCT_NAME ||
+                        state == VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION
+                    if (isRetryable && isVoiceFlowWaiting) {
                         binding.systemMessageText.text = "다시 듣는 중..."
-                        Log.d("STT", "MainActivity: STT retry after error=$errorCode delayMs=$delayMs")
                         binding.root.postDelayed({
-                            Log.d("STT", "MainActivity: STT retry delayed → startListening()")
                             sttManager?.startListening()
-                        }, delayMs)
+                        }, 800L)
                     }
                 }
             },
@@ -579,8 +576,11 @@ class MainActivity : AppCompatActivity() {
                     binding.micButton.isEnabled = !listening
                     if (listening) {
                         binding.systemMessageText.text = "듣는 중..."
-                        // 내가 말한 메시지에는 사용자가 실제 말한 데이터만 표시. "듣는 중" 등 시스템 문구 넣지 않음.
                         binding.userSpeechText.text = ""
+                    } else {
+                        if (binding.systemMessageText.text == "듣는 중...") {
+                            binding.systemMessageText.text = ""
+                        }
                     }
                     updateVoiceFlowButtonVisibility()
                 }
@@ -596,7 +596,6 @@ class MainActivity : AppCompatActivity() {
                     val isConfirmWaiting = state == VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION
                     if (isConfirmWaiting || waitingForTouchConfirm) {
                         sttManager?.stopListening()
-                        Log.d(TAG, "[STT 부분인식 통과] yes-like: '$text' (confirm=$isConfirmWaiting, touch=$waitingForTouchConfirm)")
                         if (waitingForTouchConfirm) {
                             waitingForTouchConfirm = false
                             handleTouchConfirmYesNo(text)
@@ -606,8 +605,11 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             },
+            onListeningEndedReason = { reason ->
+                runOnUiThread { binding.systemMessageText.text = "음성인식 종료: $reason" }
+            },
             beepPlayer = beepPlayer
-        ).also { if (it.init()) Log.d(TAG, "STT 초기화 완료") }
+        ).also { it.init() }
     }
 
     private fun updateVoiceFlowButtonVisibility() {
@@ -719,12 +721,10 @@ class MainActivity : AppCompatActivity() {
             t.contains("맞") || t.contains("그래") || t.contains("좋아") ||
             t == "yes" || t == "y"
         if (isYes) {
-            Log.d(TAG, "[TOUCH_CONFIRM] POSITIVE, reset to IDLE")
             speak(VoicePrompts.PROMPT_DONE) {
                 resetToIdleFromTouch()
             }
         } else {
-            Log.d(TAG, "[TOUCH_CONFIRM] NON_POSITIVE, reset to IDLE with touch restart prompt")
             speak(VoicePrompts.PROMPT_TOUCH_RESTART) {
                 resetToIdleFromTouch()
             }
@@ -735,24 +735,20 @@ class MainActivity : AppCompatActivity() {
     private fun enterTouchConfirm() {
         if (touchConfirmInProgress) return
         touchConfirmInProgress = true
+        touchConfirmScheduled = false
         waitingForTouchConfirm = true
         touchConfirmSttRetryCount = 0
-        Log.d(TAG, "[TOUCH_CONFIRM] enterTouchConfirm: target=${getTargetLabel()}")
-        // "맞습니까? 맞으면 예라고 해주세요" 플로우와 동일: TTS 끝나면 바로 STT 시작
         val question = "상품에 닿았나요? 닿았으면 예라고 말해주세요."
         speak(question) {
-            runOnUiThread {
-                Log.d("STT", "MainActivity: enterTouchConfirm() → startListening() (맞습니까 플로우와 동일)")
-                sttManager?.startListening()
-            }
+            runOnUiThread { sttManager?.startListening() }
         }
     }
 
     /** TOUCH_CONFIRM 종료 후 완전 초기화(S0 IDLE) */
     private fun resetToIdleFromTouch() {
         runOnUiThread {
-            Log.d(TAG, "[TOUCH_CONFIRM] resetToIdleFromTouch")
             touchConfirmInProgress = false
+            touchConfirmScheduled = false
             waitingForTouchConfirm = false
             touchActive = false
             touchFrameCount = 0
@@ -821,7 +817,6 @@ class MainActivity : AppCompatActivity() {
             sttManager?.stopListening()
         } else {
             binding.systemMessageText.text = "듣는 중..."
-            Log.d("STT", "MainActivity: onMicButtonClicked() → startListening() (manual)")
             sttManager?.startListening()
         }
     }
@@ -842,7 +837,7 @@ class MainActivity : AppCompatActivity() {
                     binding.overlayView.setDetections(listOf(box), frozenImageWidth, frozenImageHeight)
                 }
             },
-            onTrackingLost = { transitionToSearching() }
+            onTrackingLost = { transitionToSearching(skipTtsDetectedReset = true) }
         )
     }
 
@@ -868,7 +863,6 @@ class MainActivity : AppCompatActivity() {
                 .build()
 
             handLandmarker = HandLandmarker.createFromOptions(this, options)
-            Log.d(TAG, "✓ MediaPipe Hands 초기화 성공")
         } catch (e: Exception) {
             Log.e(TAG, "MediaPipe Hands 초기화 실패", e)
         }
@@ -983,6 +977,8 @@ class MainActivity : AppCompatActivity() {
     /** @param actualPrimaryLabel 탐지된 1순위 라벨(음성 플로우에서 요청 상품과 비교용). null이면 box.label 사용 */
     private fun transitionToLocked(box: OverlayView.DetectionBox, imageWidth: Int, imageHeight: Int, actualPrimaryLabel: String? = null) {
         runOnUiThread {
+            // 이미 LOCKED면 재진입 방지 (여러 프레임이 runOnUiThread로 쌓여 TTS/토스트 반복 재생되는 것 방지)
+            if (searchState == SearchState.LOCKED) return@runOnUiThread
             searchState = SearchState.LOCKED
             lockedTargetLabel = box.label
             validationFailCount = 0
@@ -992,6 +988,7 @@ class MainActivity : AppCompatActivity() {
             ttsGrabbedPlayed = false
             ttsAskAnotherPlayed = false
             touchConfirmInProgress = false
+            touchConfirmScheduled = false
             waitingForTouchConfirm = false
             handsOverlapFrameCount = 0
             pinchGrabFrameCount = 0
@@ -1009,10 +1006,10 @@ class MainActivity : AppCompatActivity() {
             if (!ttsDetectedPlayed) {
                 ttsDetectedPlayed = true
                 speak("객체를 탐지했습니다. 손을 뻗어 잡아주세요.")
+                Toast.makeText(this, "타겟 고정 → 자이로 추적 모드", Toast.LENGTH_SHORT).show()
             }
             binding.yoloxStatus.text = "🔒 고정: ${box.label} (자이로)"
             binding.handsStatus.text = "📐 자이로: ON"
-            Toast.makeText(this, "타겟 고정 → 자이로 추적 모드", Toast.LENGTH_SHORT).show()
             if (voiceFlowController?.currentState == VoiceFlowController.VoiceFlowState.SEARCHING_PRODUCT) {
                 cancelSearchTimeout()
                 val requested = voiceSearchTargetLabel
@@ -1027,7 +1024,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun transitionToSearching() {
+    private fun transitionToSearching(skipTtsDetectedReset: Boolean = false) {
         runOnUiThread {
             stopPositionAnnounce()
             searchState = SearchState.SEARCHING
@@ -1036,11 +1033,12 @@ class MainActivity : AppCompatActivity() {
             pendingLockCount = 0
             validationFailCount = 0
             wasOccluded = false
-            ttsDetectedPlayed = false
+            if (!skipTtsDetectedReset) ttsDetectedPlayed = false
             ttsGrabPlayed = false
             ttsGrabbedPlayed = false
             ttsAskAnotherPlayed = false
             touchConfirmInProgress = false
+            touchConfirmScheduled = false
             waitingForTouchConfirm = false
             handsOverlapFrameCount = 0
             pinchGrabFrameCount = 0
@@ -1072,9 +1070,8 @@ class MainActivity : AppCompatActivity() {
                         .filter { it.isNotEmpty() && !it.startsWith("#") }
                 }
             }
-            Log.d(TAG, "클래스 라벨 ${classLabels.size}개 로드")
         } catch (e: Exception) {
-            Log.d(TAG, "classes.txt 없음 또는 로드 실패 → Object_N 표시", e)
+            Log.e(TAG, "classes.txt 로드 실패", e)
             classLabels = emptyList()
         }
     }
@@ -1144,7 +1141,6 @@ class MainActivity : AppCompatActivity() {
             yoloxInterpreter = Interpreter(modelFile, options)
             val inputShape = yoloxInterpreter!!.getInputTensor(0).shape()
             val inputSize = if (inputShape.size >= 3 && inputShape[1] == 3) inputShape[2] else inputShape[1]
-            Log.d(TAG, "YOLOX 로드 | $modelFilename | 입력 ${inputSize}x${inputSize}")
         } catch (e: Exception) {
             Log.e(TAG, "YOLOX 초기화 실패", e)
             runOnUiThread { binding.systemMessageText.text = "YOLOX 초기화 실패"; binding.statusText.text = "YOLOX 초기화 실패" }
@@ -1198,7 +1194,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // YOLOX 진단 로그: 3초마다 한 번만 출력 (로그 과다 방지)
-    private var lastYoloxDiagTimeMs = 0L
     private var firstInferenceLogged = false
     private var lastTargetMatchDiagMs = 0L
 
@@ -1293,17 +1288,18 @@ class MainActivity : AppCompatActivity() {
                     if (handTouch) {
                         touchFrameCount++
                         releaseFrameCount = 0
-                        if (!touchActive && !touchConfirmInProgress && touchFrameCount >= TOUCH_CONFIRM_FRAMES) {
+                        if (!touchActive && !touchConfirmInProgress && !touchConfirmScheduled && touchFrameCount >= TOUCH_CONFIRM_FRAMES) {
                             touchActive = true
                             val nowMs = System.currentTimeMillis()
-                            if (nowMs - lastTouchTtsTimeMs >= TOUCH_TTS_COOLDOWN_MS) {
+                            val cooldownOk = nowMs - lastTouchTtsTimeMs >= TOUCH_TTS_COOLDOWN_MS
+                            if (cooldownOk) {
                                 lastTouchTtsTimeMs = nowMs
+                                touchConfirmScheduled = true
                                 runOnUiThread {
                                     stopPositionAnnounce()
                                     stopHandGuidanceTTS()
                                     enterTouchConfirm()
                                 }
-                                Log.d(TAG, "[touch] touchActive=true, TTS 발화 (cooldown ${TOUCH_TTS_COOLDOWN_MS}ms)")
                             }
                         }
                     } else {
@@ -1311,17 +1307,9 @@ class MainActivity : AppCompatActivity() {
                         if (releaseFrameCount >= RELEASE_HOLD_FRAMES) {
                             touchActive = false
                             touchFrameCount = 0
-                            Log.d(TAG, "[touch] touchActive=false (releaseHold ${RELEASE_HOLD_FRAMES} frames)")
                         } else {
                             touchFrameCount = 0
                         }
-                    }
-                    // 개발용: 카운터/상태 변화 시에만 로그 (프레임 스팸 방지)
-                    if (handTouch && touchFrameCount == TOUCH_CONFIRM_FRAMES) {
-                        Log.d(TAG, "[touch] touchFrameCount=$touchFrameCount -> confirm")
-                    }
-                    if (!handTouch && releaseFrameCount == RELEASE_HOLD_FRAMES) {
-                        Log.d(TAG, "[touch] releaseFrameCount=$releaseFrameCount -> release")
                     }
 
                     gyroManager.suspendUpdates = handsOverlap
@@ -1476,15 +1464,7 @@ class MainActivity : AppCompatActivity() {
                 inputSize,
                 letterboxScaleR = letterboxScale
             )
-            if (!firstInferenceLogged) {
-                firstInferenceLogged = true
-                Log.d(TAG, "YOLOX 첫 추론 | 입력 bitmap ${bitmap.width}x${bitmap.height} → letterbox ${inputSize}x${inputSize} scale=$letterboxScale | 추론 ${inferMs}ms")
-            }
-            val now = System.currentTimeMillis()
-            if (now - lastYoloxDiagTimeMs >= 3000) {
-                lastYoloxDiagTimeMs = now
-                Log.d(TAG, "YOLOX 진단 | 추론 ${inferMs}ms | 감지 ${detections.size}개 maxConf=${String.format("%.2f", lastYoloxMaxConf)}")
-            }
+            if (!firstInferenceLogged) firstInferenceLogged = true
             return detections
         } catch (e: Exception) {
             Log.e(TAG, "YOLOX 추론 실패", e)
@@ -1541,10 +1521,7 @@ class MainActivity : AppCompatActivity() {
             maxOf(output[0][0], output[1][0], output[2][0], output[3][0]) <= 1.5f
         } else true
 
-        if (!yoloxShapeLogged) {
-            yoloxShapeLogged = true
-            Log.d(TAG, "YOLOX shape: dim1=$dim1 dim2=$dim2 → numBoxes=$numBoxes boxSize=$boxSize")
-        }
+        if (!yoloxShapeLogged) yoloxShapeLogged = true
 
         val candidates = mutableListOf<OverlayView.DetectionBox>()
         // 4(box)+1(obj)+N(cls): 85(80), 58(53), 55(50), 54(49)
@@ -1910,6 +1887,7 @@ class MainActivity : AppCompatActivity() {
                     SearchState.LOCKED -> {
                         if (frozenBox != null) {
                             val msg = when {
+                                waitingForTouchConfirm && (sttManager?.isListening() == true) -> "듣는 중..."
                                 waitingForTouchConfirm -> "상품에 닿았나요? 예라고 말해주세요."
                                 touchActive -> "손이 제품에 닿았어요"
                                 else -> "손을 뻗어 잡아주세요"
@@ -1965,6 +1943,12 @@ class MainActivity : AppCompatActivity() {
         beepPlayer?.release()
         handLandmarker?.close()
         if (::gyroManager.isInitialized) gyroManager.stopTracking()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        ttsManager?.stop()
+        sttManager?.stopListening()
     }
 
     override fun onStop() {

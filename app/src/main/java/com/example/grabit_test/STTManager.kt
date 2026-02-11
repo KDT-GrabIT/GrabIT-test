@@ -24,7 +24,9 @@ class STTManager(
     private val onErrorWithCode: ((String, Int) -> Unit)? = null,
     private val onListeningChanged: (Boolean) -> Unit = {},
     private val onPartialResult: ((String) -> Unit)? = null,
-    private val beepPlayer: BeepPlayer? = null
+    private val beepPlayer: BeepPlayer? = null,
+    /** 음성 인식이 끝난 원인(디버깅용). onEndOfSpeech/onError/onResults 시 로그 + 이 콜백으로 전달 */
+    private val onListeningEndedReason: (String) -> Unit = {}
 ) {
     companion object {
         private const val TAG = "STT"
@@ -36,22 +38,15 @@ class STTManager(
     private var lastPartialText: String? = null
 
     fun init(): Boolean {
-        val available = SpeechRecognizer.isRecognitionAvailable(context)
-        Log.d(TAG, "STT_INIT isRecognitionAvailable=$available")
-        if (!available) {
-            Log.e(TAG, "STT_INIT 실패: SpeechRecognizer 사용 불가")
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            Log.e(TAG, "STT 초기화 실패: SpeechRecognizer 사용 불가")
             onError("이 기기에서는 음성 인식을 지원하지 않습니다.")
             return false
         }
-
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
             setRecognitionListener(createRecognitionListener())
         }
-        Log.d(TAG, "STT_INIT speechRecognizerCreated=${speechRecognizer != null}")
-
         audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        Log.d(TAG, "STT_INIT audioManagerCreated=${audioManager != null}")
-        Log.d(TAG, "STT_INIT 완료")
         return true
     }
     
@@ -59,46 +54,42 @@ class STTManager(
      * 음성 인식 시작. beepPlayer가 있으면 삐 소리만 재생 후 음성녹음 시작.
      */
     fun startListening() {
+        // 비프 재생 전부터 "듣는 중" 표시 (엔진이 실제로 켜지기 전에도 사용자 피드백)
+        onListeningChanged(true)
         val sr = speechRecognizer
         if (sr == null) {
-            Log.e(TAG, "STT_START 실패: speechRecognizer=null")
+            Log.e(TAG, "STT 시작 실패: speechRecognizer=null")
+            onListeningChanged(false)
             onError("SpeechRecognizer가 초기화되지 않았습니다.")
             return
         }
-        val permissionState =
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-        if (permissionState != PackageManager.PERMISSION_GRANTED) {
-            Log.e(TAG, "STT_START 실패: RECORD_AUDIO 권한 없음")
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "STT 시작 실패: RECORD_AUDIO 권한 없음")
+            onListeningChanged(false)
             onError("마이크 권한이 필요합니다.")
             return
         }
         if (beepPlayer != null) {
-            Log.d(TAG, "STT_START → beep → doStartListening")
-            beepPlayer.playBeep {
-                doStartListening()
-            }
+            beepPlayer.playBeep { doStartListening() }
         } else {
             doStartListening()
         }
     }
 
     private fun doStartListening() {
-        val sr = speechRecognizer ?: return
+        val sr = speechRecognizer ?: run {
+            onListeningChanged(false)
+            return
+        }
         try {
             if (isListening) sr.stopListening()
         } catch (_: Exception) {}
-        try {
-            sr.cancel()
-        } catch (_: Exception) {}
         isListening = false
-        onListeningChanged(false)
-        audioManager?.let { am ->
-            am.requestAudioFocus(
-                { },
-                AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
-            )
-        }
+        audioManager?.requestAudioFocus(
+            { },
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+        )
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
@@ -107,17 +98,18 @@ class STTManager(
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 10000)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 8000)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500)
         }
         try {
             sr.startListening(intent)
             isListening = true
             onListeningChanged(true)
-            Log.d(TAG, "STT_START_OK ts=${System.currentTimeMillis()}")
         } catch (e: Exception) {
-            Log.e(TAG, "STT_START 예외", e)
+            Log.e(TAG, "STT 시작 예외", e)
+            isListening = false
+            onListeningChanged(false)
             onError("음성 인식 시작 실패: ${e.message}")
         }
     }
@@ -127,21 +119,16 @@ class STTManager(
             speechRecognizer?.stopListening()
             isListening = false
             onListeningChanged(false)
-            val ts = System.currentTimeMillis()
-            Log.d(TAG, "STT_STOP ts=$ts isListeningAfter=$isListening")
         } catch (e: Exception) {
             Log.e(TAG, "stopListening 실패", e)
         }
     }
 
-    /** 필요 시 외부에서 명시적으로 취소 호출용 (로그/포커스 정리 포함) */
     fun cancelListening() {
         try {
             speechRecognizer?.cancel()
             isListening = false
             onListeningChanged(false)
-            val ts = System.currentTimeMillis()
-            Log.d(TAG, "STT_CANCEL ts=$ts isListeningAfter=$isListening")
         } catch (e: Exception) {
             Log.e(TAG, "cancelListening 실패", e)
         }
@@ -159,49 +146,24 @@ class STTManager(
             isListening = false
             onListeningChanged(false)
             audioManager?.abandonAudioFocus(null)
-            Log.d(TAG, "STT_RELEASE")
         } catch (e: Exception) {
             Log.e(TAG, "release 실패", e)
         }
     }
 
-    private fun errorCodeToString(error: Int): String =
-        when (error) {
-            SpeechRecognizer.ERROR_AUDIO -> "ERROR_AUDIO"
-            SpeechRecognizer.ERROR_CLIENT -> "ERROR_CLIENT"
-            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ERROR_INSUFFICIENT_PERMISSIONS"
-            SpeechRecognizer.ERROR_NETWORK -> "ERROR_NETWORK"
-            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
-            SpeechRecognizer.ERROR_NO_MATCH -> "ERROR_NO_MATCH"
-            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "ERROR_RECOGNIZER_BUSY"
-            SpeechRecognizer.ERROR_SERVER -> "ERROR_SERVER"
-            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT"
-            else -> "ERROR_UNKNOWN($error)"
-        }
-
     private fun createRecognitionListener() = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {
-            Log.d(TAG, "STT_CB onReadyForSpeech ts=${System.currentTimeMillis()}")
-        }
-
-        override fun onBeginningOfSpeech() {
-            Log.d(TAG, "STT_CB onBeginningOfSpeech ts=${System.currentTimeMillis()}")
-        }
-
-        override fun onRmsChanged(rmsdB: Float) {
-            // 로그 과다 방지: 레벨은 필요 시에만 확인
-        }
-
+        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
 
         override fun onEndOfSpeech() {
-            Log.d(TAG, "STT_CB onEndOfSpeech ts=${System.currentTimeMillis()}")
+            onListeningEndedReason("onEndOfSpeech")
             isListening = false
             onListeningChanged(false)
         }
 
         override fun onError(error: Int) {
-            val codeName = errorCodeToString(error)
             val msg = when (error) {
                 SpeechRecognizer.ERROR_AUDIO -> "오디오 에러"
                 SpeechRecognizer.ERROR_CLIENT -> "클라이언트 에러"
@@ -214,41 +176,33 @@ class STTManager(
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "말 없음 타임아웃"
                 else -> "알 수 없는 에러 (코드: $error)"
             }
-            Log.e(TAG, "STT_CB onError code=$error($codeName), msg=$msg ts=${System.currentTimeMillis()}")
+            onListeningEndedReason("onError($error)")
             isListening = false
             onListeningChanged(false)
             onErrorWithCode?.invoke(msg, error)
-            if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_CLIENT) {
+            if (error != SpeechRecognizer.ERROR_NO_MATCH &&
+                error != SpeechRecognizer.ERROR_CLIENT &&
+                error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+            ) {
                 onError(msg)
             }
         }
 
         override fun onResults(results: Bundle?) {
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            val confidences = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)?.joinToString(
-                prefix = "[",
-                postfix = "]"
-            ) { String.format("%.2f", it) }
             val text = matches?.firstOrNull()?.trim()
             val finalText = when {
                 !text.isNullOrBlank() -> text
                 !lastPartialText.isNullOrBlank() -> lastPartialText
                 else -> null
             }
-
-            Log.d(
-                TAG,
-                "STT_CB onResults rawList=$matches confidences=$confidences text='$text' lastPartialText='$lastPartialText' finalText='$finalText' ts=${System.currentTimeMillis()}"
-            )
-
             if (!finalText.isNullOrBlank()) {
                 onResult(finalText)
-                // 최종 결과를 정상 처리한 뒤에만 partial 캐시를 초기화
                 lastPartialText = null
             } else {
-                Log.d(TAG, "STT_CB onResults NO_MATCH (finalText empty) ts=${System.currentTimeMillis()}")
                 onError("인식된 말이 없습니다.")
             }
+            onListeningEndedReason(if (!finalText.isNullOrBlank()) "onResults" else "onResults(빈 결과)")
             isListening = false
             onListeningChanged(false)
         }
@@ -258,10 +212,6 @@ class STTManager(
             val text = matches?.firstOrNull()?.trim() ?: ""
             if (text.isNotBlank()) lastPartialText = text
             onPartialResult?.invoke(text)
-            Log.d(
-                TAG,
-                "STT_CB onPartialResults rawList=$matches lastPartialText='$lastPartialText' ts=${System.currentTimeMillis()}"
-            )
         }
 
         override fun onEvent(eventType: Int, params: Bundle?) {}

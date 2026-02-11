@@ -40,12 +40,8 @@ class TTSManager(
                 }
                 textToSpeech?.setSpeechRate(0.82f)
                 textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        Log.d(TAG, "TTS 재생 시작")
-                    }
-
+                    override fun onStart(utteranceId: String?) {}
                     override fun onDone(utteranceId: String?) {
-                        Log.d(TAG, "TTS 재생 완료")
                         cancelSpeakDoneTimeout()
                         pendingSpeakDoneCallback?.invoke()
                         pendingSpeakDoneCallback = null
@@ -60,7 +56,6 @@ class TTSManager(
                 isReady = true
                 onReady()
                 callback(true)
-                Log.d(TAG, "TTSManager 초기화 완료")
             } else {
                 Log.e(TAG, "TTS 초기화 실패")
                 callback(false)
@@ -83,13 +78,6 @@ class TTSManager(
             putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, UTTERANCE_ID)
         }
 
-        // TTS_TRACE: 실제 발화 문자열과 호출자 추적
-        runCatching {
-            val st = Throwable().stackTrace
-            val caller = st.take(6).joinToString("\n")
-            Log.e(TAG, "[TTS_TRACE] speakText='${text.trim()}', queueMode=$queueMode\ncaller=\n$caller")
-        }
-
         @Suppress("DEPRECATION")
         val result = textToSpeech?.speak(text.trim(), queueMode, params, UTTERANCE_ID)
         if (result == TextToSpeech.ERROR) {
@@ -98,7 +86,6 @@ class TTSManager(
             pendingSpeakDoneCallback = null
             onError("음성 출력 실패")
         } else {
-            Log.d(TAG, "TTS speak 요청: $text")
             speakDoneTimeoutRunnable = Runnable {
                 Log.w(TAG, "TTS onDone 타임아웃 (폴백)")
                 speakDoneTimeoutRunnable = null
@@ -117,7 +104,6 @@ class TTSManager(
 
     fun stop() {
         textToSpeech?.stop()
-        Log.d(TAG, "TTS 중지")
     }
 
     fun isSpeaking(): Boolean = textToSpeech?.isSpeaking == true
@@ -130,7 +116,6 @@ class TTSManager(
             textToSpeech?.shutdown()
             textToSpeech = null
             isReady = false
-            Log.d(TAG, "TTSManager 해제")
         } catch (e: Exception) {
             Log.e(TAG, "release 실패", e)
         }

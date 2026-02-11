@@ -77,8 +77,6 @@ class VoiceFlowController(
         val normalized = text.trim()
         if (normalized.isBlank()) return
 
-        Log.d(TAG, "onSttResult: state=$currentState, text='$normalized'")
-
         when (currentState) {
             VoiceFlowState.WAITING_PRODUCT_NAME -> handleProductNameReceived(normalized)
             VoiceFlowState.WAITING_CONFIRMATION -> handleConfirmationReceived(normalized)
@@ -133,12 +131,6 @@ class VoiceFlowController(
             resetToAppStartWithRestartPrompt()
         }
 
-        Log.d(
-            TAG,
-            "handleConfirmationReceived: state=$currentState, recognizedText='$normalized', " +
-                "isYes=$isYes, branchChosen=$branchChosen, startSearchCalled=$startSearchCalled, " +
-                "currentTarget='$currentTargetSnapshot'"
-        )
     }
 
     private fun isConfirmationYes(text: String): Boolean {
@@ -174,10 +166,6 @@ class VoiceFlowController(
     /** 확인/재입력 버튼 클릭 (접근성용 보조) */
     fun onConfirmClicked() {
         if (currentState == VoiceFlowState.CONFIRM_PRODUCT || currentState == VoiceFlowState.WAITING_CONFIRMATION) {
-            Log.d(
-                TAG,
-                "onConfirmClicked: state=$currentState, currentProductName='$currentProductName' → restartToAppStart"
-            )
             resetToAppStartWithRestartPrompt()
         }
     }
@@ -287,7 +275,6 @@ class VoiceFlowController(
             VoiceFlowState.SEARCH_FAILED -> "탐색 실패"
         }
         onStateChanged(state, stateLabel)
-        Log.d(TAG, "상태 전환: $stateLabel")
     }
 
     fun announceSystem(message: String) {
