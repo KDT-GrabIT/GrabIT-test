@@ -15,23 +15,24 @@ import java.util.Locale
 
 /**
  * Android SpeechRecognizer 기반 STT(음성→텍스트) 매니저
+ * beepPlayer를 주입하면 startListening() 시 삐 소리만 재생 후 음성녹음 시작.
  */
 class STTManager(
     private val context: Context,
     private val onResult: (String) -> Unit,
     private val onError: (String) -> Unit,
     private val onErrorWithCode: ((String, Int) -> Unit)? = null,
-    private val onListeningChanged: (Boolean) -> Unit = {}
+    private val onListeningChanged: (Boolean) -> Unit = {},
+    private val onPartialResult: ((String) -> Unit)? = null,
+    private val beepPlayer: BeepPlayer? = null
 ) {
     companion object {
-        // Logcat에서 "STT" 로 검색하면 모든 흐름이 보이도록 통일된 TAG 사용
         private const val TAG = "STT"
     }
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListening = false
     private var audioManager: AudioManager? = null
-    /** 마지막 partial 결과 텍스트 (final 결과 fallback 용) */
     private var lastPartialText: String? = null
 
     fun init(): Boolean {
@@ -54,6 +55,9 @@ class STTManager(
         return true
     }
     
+    /**
+     * 음성 인식 시작. beepPlayer가 있으면 삐 소리만 재생 후 음성녹음 시작.
+     */
     fun startListening() {
         val sr = speechRecognizer
         if (sr == null) {
@@ -61,58 +65,54 @@ class STTManager(
             onError("SpeechRecognizer가 초기화되지 않았습니다.")
             return
         }
-
-        // 권한 체크 (Activity 쪽에서도 요청하지만, 방어적으로 한 번 더 확인)
         val permissionState =
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-        Log.d(TAG, "STT_START permissionState=$permissionState (GRANTED=${permissionState == PackageManager.PERMISSION_GRANTED})")
         if (permissionState != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "STT_START 실패: RECORD_AUDIO 권한 없음")
             onError("마이크 권한이 필요합니다.")
             return
         }
+        if (beepPlayer != null) {
+            Log.d(TAG, "STT_START → beep → doStartListening")
+            beepPlayer.playBeep {
+                doStartListening()
+            }
+        } else {
+            doStartListening()
+        }
+    }
 
-        // 이전 세션 정리 (RECOGNIZER_BUSY / 연속 재시도 시 마이크 꺼짐 방지)
+    private fun doStartListening() {
+        val sr = speechRecognizer ?: return
         try {
             if (isListening) sr.stopListening()
         } catch (_: Exception) {}
         isListening = false
         onListeningChanged(false)
-
-        // 오디오 포커스 요청 (STT가 확실히 마이크/오디오를 잡도록)
         audioManager?.let { am ->
-            val result = am.requestAudioFocus(
-                { /* 사용 안 함 */ },
+            am.requestAudioFocus(
+                { },
                 AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
             )
-            Log.d(TAG, "STT_AUDIOFOCUS_REQUEST result=$result")
         }
-
-        val ts = System.currentTimeMillis()
-        Log.d(TAG, "STT_START ts=$ts isListeningBefore=$isListening")
-
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            // 한국어: ko-KR 명시
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ko-KR")
             putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "ko-KR")
-            // 호출 패키지/결과 개수/부분 결과 활성화
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            // 사용자가 말할 시간 확보 (일부 기기에서만 적용되나 설정해둠)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500)
         }
-
         try {
             sr.startListening(intent)
             isListening = true
             onListeningChanged(true)
-            Log.d(TAG, "STT_START_OK ts=${System.currentTimeMillis()} isListening=$isListening")
+            Log.d(TAG, "STT_START_OK ts=${System.currentTimeMillis()}")
         } catch (e: Exception) {
             Log.e(TAG, "STT_START 예외", e)
             onError("음성 인식 시작 실패: ${e.message}")
@@ -183,8 +183,7 @@ class STTManager(
         }
 
         override fun onRmsChanged(rmsdB: Float) {
-            // 레벨 변화를 너무 자주 찍으면 로그가 과도해지므로, 간단한 값만 남김
-            Log.d(TAG, "STT_CB onRmsChanged rms=$rmsdB")
+            // 로그 과다 방지: 레벨은 필요 시에만 확인
         }
 
         override fun onBufferReceived(buffer: ByteArray?) {}
@@ -253,6 +252,7 @@ class STTManager(
             val text = matches?.firstOrNull()?.trim()
             if (!text.isNullOrBlank()) {
                 lastPartialText = text
+                onPartialResult?.invoke(text)
             }
             Log.d(
                 TAG,
