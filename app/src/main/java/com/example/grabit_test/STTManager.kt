@@ -23,6 +23,7 @@ class STTManager(
     private val onError: (String) -> Unit,
     private val onErrorWithCode: ((String, Int) -> Unit)? = null,
     private val onListeningChanged: (Boolean) -> Unit = {},
+    private val onPartialResult: ((String) -> Unit)? = null,
     private val beepPlayer: BeepPlayer? = null,
     private val speakPrompt: ((String, () -> Unit) -> Unit)? = null
 ) {
@@ -186,8 +187,7 @@ class STTManager(
         }
 
         override fun onRmsChanged(rmsdB: Float) {
-            // 레벨 변화를 너무 자주 찍으면 로그가 과도해지므로, 간단한 값만 남김
-            Log.d(TAG, "STT_CB onRmsChanged rms=$rmsdB")
+            // 로그 과다 방지: 레벨은 필요 시에만 확인
         }
 
         override fun onBufferReceived(buffer: ByteArray?) {}
@@ -256,6 +256,7 @@ class STTManager(
             val text = matches?.firstOrNull()?.trim()
             if (!text.isNullOrBlank()) {
                 lastPartialText = text
+                onPartialResult?.invoke(text)
             }
             Log.d(
                 TAG,

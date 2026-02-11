@@ -402,6 +402,11 @@ class MainActivity : AppCompatActivity() {
                     updateVoiceFlowButtonVisibility()
                 }
             },
+            onPartialResult = { text ->
+                runOnUiThread {
+                    binding.sttResultText.text = "🎤 인식 중: $text"
+                }
+            },
             beepPlayer = beepPlayer,
             speakPrompt = { prompt, onDone ->
                 ttsManager?.speak(prompt, TextToSpeech.QUEUE_FLUSH, onDone) ?: onDone()
@@ -498,11 +503,12 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
-    /** TOUCH_CONFIRM: near-contact 후 "상품에 닿았나요?" 질문에 대한 응답 처리 */
+    /** TOUCH_CONFIRM: near-contact 후 "상품에 닿았나요?" 질문에 대한 응답 처리 (STT가 "네"→"내"로 인식하는 경우 포함) */
     private fun handleTouchConfirmYesNo(text: String) {
         val t = text.trim().lowercase().replace(" ", "")
-        val isYes = t.contains("예") || t.contains("네") || t.contains("응") ||
-            t.contains("맞") || t == "yes" || t == "y"
+        val isYes = t.contains("예") || t.contains("네") || t.contains("내") || t.contains("응") ||
+            t.contains("맞") || t.contains("그래") || t.contains("좋아") ||
+            t == "yes" || t == "y"
         if (isYes) {
             Log.d(TAG, "[TOUCH_CONFIRM] POSITIVE, reset to IDLE")
             speak(VoicePrompts.PROMPT_DONE) {
