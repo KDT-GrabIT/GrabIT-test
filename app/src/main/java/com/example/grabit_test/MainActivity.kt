@@ -16,6 +16,7 @@ import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
@@ -24,6 +25,8 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.graphics.RectF
 import com.example.grabitTest.databinding.ActivityMainBinding
 import com.google.mediapipe.framework.image.BitmapImageBuilder
@@ -136,8 +139,12 @@ class MainActivity : AppCompatActivity() {
     private var ttsGrabbedPlayed = false   // 객체 잡았음 TTS 1회만
     private var ttsAskAnotherPlayed = false
     private var waitingForTouchConfirm = false  // (단순화 후 사용 안 함)
-    /** 터치 확인("상품에 닿았나요?") STT NO_MATCH/타임아웃 시 재시도 횟수 — 맞습니까와 동일하게 1회 재시도 */
+    /** STT NO_MATCH/타임아웃 시 "다시 말해주세요" TTS 후 재시도 횟수 (이 횟수만큼 반복) */
+    private val STT_MAX_RETRIES = 3
+    /** 터치 확인("상품에 닿았나요?") STT 재시도 카운트 */
     private var touchConfirmSttRetryCount = 0
+    /** 상품명/맞습니까 대기 시 STT 재시도 카운트 */
+    private var voiceFlowSttRetryCount = 0
     private var handsOverlapFrameCount = 0  // 손-박스 겹침 연속 프레임 수 (잘못된 잡기 판정용)
     private var pinchGrabFrameCount = 0     // 엄지+검지 잡기 판정 연속 프레임
 
@@ -187,6 +194,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // 하단 메시지 박스가 네비게이션 바와 겹치지 않도록 시스템 하단 inset 반영
+        ViewCompat.setOnApplyWindowInsetsListener(binding.messageOverlayBottom) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bottomPx = if (systemBars.bottom > 0) systemBars.bottom
+            else (56 * resources.displayMetrics.density).toInt()
+            (v.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = bottomPx
+            v.requestLayout()
+            insets
+        }
+        binding.root.requestApplyInsets()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
@@ -285,6 +303,7 @@ class MainActivity : AppCompatActivity() {
         binding.targetRow.visibility = View.GONE
         binding.systemMessageText.text = ""
         binding.statusText.text = ""
+        updateSearchTargetLabel()
         stopHandGuidanceTTS()
     }
 
@@ -306,6 +325,7 @@ class MainActivity : AppCompatActivity() {
         binding.cameraContainer.visibility = View.VISIBLE
         binding.btnFirstScreen.visibility = View.VISIBLE
         binding.overlayView.visibility = View.VISIBLE
+        updateSearchTargetLabel()
         binding.systemMessageText.text = "찾는 중: ${getTargetLabel()}"
         binding.statusText.text = "찾는 중: ${getTargetLabel()}"
         startCamera()
@@ -429,11 +449,13 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     Log.d(TAG, "[STT 결과] $text")
                     binding.userSpeechText.text = text
+                    // [예 말하기 공통] 1. 찾는 상품 확인 → voiceFlowController 2. 객체 잡았나요 → handleTouchConfirmYesNo. 둘 다 동시 적용.
                     if (waitingForTouchConfirm) {
                         waitingForTouchConfirm = false
                         handleTouchConfirmYesNo(text)
                         return@runOnUiThread
                     }
+                    voiceFlowSttRetryCount = 0
                     voiceFlowController?.onSttResult(text)
                 }
             },
@@ -460,38 +482,77 @@ class MainActivity : AppCompatActivity() {
                         errorCode == android.speech.SpeechRecognizer.ERROR_NO_MATCH ||
                             errorCode == android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT
 
-                    // 터치 확인("상품에 닿았나요?") — 맞습니까와 동일하게 NO_MATCH/타임아웃 시 1회 재시도 후 실패 처리
+                    // 터치 확인("상품에 닿았나요?") — 매 실패마다 오류 TTS → "다시 말해주세요" → 재시도. 포기 시에는 오류 TTS 없이 화면만 갱신
                     if (waitingForTouchConfirm && isNoMatchOrTimeout) {
-                        if (touchConfirmSttRetryCount < 1) {
+                        if (touchConfirmSttRetryCount < STT_MAX_RETRIES) {
                             touchConfirmSttRetryCount++
-                            binding.systemMessageText.text = "다시 말해주세요."
+                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
                             Log.d("STT", "MainActivity: touch confirm STT retry (no_match/timeout) count=$touchConfirmSttRetryCount")
-                            binding.root.postDelayed({
-                                if (!waitingForTouchConfirm) return@postDelayed
-                                sttManager?.startListening()
-                            }, 500L)
+                            speak("$msg") {
+                                runOnUiThread {
+                                    speak("다시 말해주세요.") {
+                                        runOnUiThread {
+                                            binding.root.postDelayed({
+                                                if (!waitingForTouchConfirm) return@postDelayed
+                                                Log.d("STT", "MainActivity: touch confirm retry → startListening() (삐 후 재시도)")
+                                                sttManager?.startListening()
+                                            }, 800L)
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             touchConfirmSttRetryCount = 0
                             waitingForTouchConfirm = false
-                            binding.systemMessageText.text = "손을 뻗어 잡아주세요"
+                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
                             binding.statusText.text = "손을 뻗어 잡아주세요"
                             touchActive = false
                             startPositionAnnounce()
-                            Toast.makeText(this, "음성 인식 실패. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                            speak("$msg") {
+                                speak("화면을 터치해서 다시 시작해주세요.") {
+                                    runOnUiThread {
+                                        Toast.makeText(this, "음성 인식 실패. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         }
                         return@runOnUiThread
                     }
 
                     val state = voiceFlowController?.currentState
 
-                    // 상품명/확인 대기 상태에서 NO_MATCH 또는 TIMEOUT이면, 재시도 없이 재시작 안내 후 S0로 복귀
+                    // 상품명/맞습니까 대기 상태: 매 실패마다 오류 TTS → "다시 말해주세요" → 재시도. 포기 시에는 오류 TTS 없이 터치 안내만
                     if (isNoMatchOrTimeout &&
                         (state == VoiceFlowController.VoiceFlowState.WAITING_PRODUCT_NAME ||
                                 state == VoiceFlowController.VoiceFlowState.WAITING_CONFIRMATION)
                     ) {
-                        speak(VoicePrompts.PROMPT_TOUCH_RESTART) {
-                            voiceFlowController?.start()
-                            showFirstScreen()
+                        val lastPartial = sttManager?.getLastPartialText()?.takeIf { it.isNotBlank() }
+                        if (!lastPartial.isNullOrBlank()) binding.userSpeechText.text = lastPartial
+                        if (voiceFlowSttRetryCount < STT_MAX_RETRIES) {
+                            voiceFlowSttRetryCount++
+                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
+                            Log.d("STT", "MainActivity: voice flow STT retry (no_match/timeout) count=$voiceFlowSttRetryCount")
+                            speak("$msg") {
+                                runOnUiThread {
+                                    speak("다시 말해주세요.") {
+                                        runOnUiThread {
+                                            binding.root.postDelayed({
+                                                Log.d("STT", "MainActivity: voice flow retry → startListening() (삐 후 재시도)")
+                                                sttManager?.startListening()
+                                            }, 800L)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            voiceFlowSttRetryCount = 0
+                            binding.systemMessageText.text = "음성 인식 실패: $msg (코드 $errorCode)"
+                            speak("$msg") {
+                                speak(VoicePrompts.PROMPT_TOUCH_RESTART) {
+                                    voiceFlowController?.start()
+                                    showFirstScreen()
+                                }
+                            }
                         }
                         return@runOnUiThread
                     }
@@ -518,6 +579,7 @@ class MainActivity : AppCompatActivity() {
                     binding.micButton.isEnabled = !listening
                     if (listening) {
                         binding.systemMessageText.text = "듣는 중..."
+                        // 내가 말한 메시지에는 사용자가 실제 말한 데이터만 표시. "듣는 중" 등 시스템 문구 넣지 않음.
                         binding.userSpeechText.text = ""
                     }
                     updateVoiceFlowButtonVisibility()
@@ -525,9 +587,9 @@ class MainActivity : AppCompatActivity() {
             },
             onPartialResult = { text ->
                 runOnUiThread {
-                    // 부분 결과를 실시간으로 "내가 말한 메시지"에 표시 (뭐라고 인식되는지 확인용)
-                    binding.userSpeechText.text = text
-                    // "맞습니까? 예 말해주세요" / "상품에 닿았나요? 예 말해주세요" — 짧은 "예"가 부분 인식에만 나오고 최종 결과에 안 나오는 경우 대비
+                    // 내가 말한 메시지: 사용자가 실제 말한 데이터만 실시간 표시 (빈 문자열이면 기존 값 유지)
+                    if (text.isNotBlank()) binding.userSpeechText.text = text
+                    // [예 말하기 공통] 1. 찾는 상품 확인, 2. 객체 잡았나요 — 둘 다 isShortYesLike 부분 인식 → 바로 통과. 한쪽만 수정 금지.
                     if (text.isNullOrBlank()) return@runOnUiThread
                     if (!isShortYesLike(text)) return@runOnUiThread
                     val state = voiceFlowController?.currentState
@@ -588,9 +650,12 @@ class MainActivity : AppCompatActivity() {
     private fun onStartSearchFromVoiceFlow(productName: String) {
         val targetClass = mapSpokenToClass(productName)
         if (productName.isNotBlank() && targetClass.isBlank()) {
-            speak(VoicePrompts.PROMPT_PRODUCT_RECOGNITION_FAILED)
-            // 음성으로 다시 받지 않고, 터치로 재시작만 허용
             voiceSearchTargetLabel = null
+            val failReason = "인식된 말을 상품 목록에서 찾지 못했어요. '$productName'"
+            binding.systemMessageText.text = "상품 매칭 실패: '$productName'(을)를 찾지 못했어요."
+            speak(failReason) {
+                speak(VoicePrompts.PROMPT_PRODUCT_RECOGNITION_FAILED) { }
+            }
             return
         }
         cancelSearchTimeout()
@@ -639,7 +704,7 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
-    /** 부분 인식(partial)에서 "예" 등 짧은 긍정만 골라 통과시키기 위한 판별 (길이 제한으로 오인식 방지) */
+    /** [예 말하기 공통] 부분 인식에서 "예" 등 짧은 긍정 판별. 1. 찾는 상품 확인, 2. 객체 잡았나요 — 둘 다 이 함수 사용. 항상 동시 적용. */
     private fun isShortYesLike(text: String): Boolean {
         val t = text.trim().lowercase().replace(" ", "")
         if (t.length > 6) return false
@@ -823,6 +888,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun getTargetLabel(): String = currentTargetLabel.get().trim()
 
+    /** 화면 상단 "찾는 품목" 라벨 갱신 (실제 앱처럼 찾는 품목 표시) */
+    private fun updateSearchTargetLabel() {
+        val label = getTargetLabel()
+        if (label.isEmpty()) {
+            binding.searchTargetLabel.visibility = View.GONE
+        } else {
+            val displayName = if (ProductDictionary.isLoaded()) ProductDictionary.getDisplayNameKo(label) else label
+            binding.searchTargetLabel.text = "찾는 품목: $displayName"
+            binding.searchTargetLabel.visibility = View.VISIBLE
+        }
+    }
+
     /** 특정 상품이 선택된 경우만 true. 비어 있으면 탐지 시작 안 함. */
     private fun hasSpecificTarget(): Boolean = getTargetLabel().isNotEmpty()
 
@@ -978,6 +1055,7 @@ class MainActivity : AppCompatActivity() {
             binding.resetBtn.visibility = View.GONE
             binding.overlayView.setDetections(emptyList(), 0, 0)
             binding.overlayView.setFrozen(false)
+            updateSearchTargetLabel()
             binding.systemMessageText.text = "찾는 중: ${getTargetLabel()}"
             binding.statusText.text = "찾는 중: ${getTargetLabel()}"
             stopHandGuidanceTTS()

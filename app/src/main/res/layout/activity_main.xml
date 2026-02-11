@@ -24,70 +24,73 @@
                 android:orientation="horizontal"
                 app:layout_constraintGuide_percent="0.75" />
 
-            <!-- ========== 첫 화면: 클릭하여 STT 활성화 ========== -->
+            <!-- 상단 영역: 첫 화면 + 카메라 + 메시지 오버레이 (첫 화면에서도 메시지 표시) -->
             <FrameLayout
-                android:id="@+id/firstScreen"
+                android:id="@+id/topAreaWrapper"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
-                android:background="@color/ivory_card"
-                android:clickable="true"
-                android:focusable="true"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toTopOf="@id/guideline75"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent">
 
-                <TextView
-                    android:id="@+id/welcomeText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:gravity="center"
-                    android:padding="32dp"
-                    android:text="화면을 터치해서 상품찾기를 시작해주세요"
-                    android:textColor="@color/text_primary"
-                    android:textSize="22sp"
-                    android:lineSpacingExtra="8dp" />
+                <!-- ========== 첫 화면: 클릭하여 STT 활성화 ========== -->
+                <FrameLayout
+                    android:id="@+id/firstScreen"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/ivory_card"
+                    android:clickable="true"
+                    android:focusable="true">
 
-                <ProgressBar
-                    android:id="@+id/sttProgress"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center_horizontal"
-                    android:layout_marginBottom="48dp"
-                    android:indeterminateTint="@color/accent_warm"
-                    android:visibility="gone" />
+                    <TextView
+                        android:id="@+id/welcomeText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:gravity="center"
+                        android:padding="32dp"
+                        android:text="화면을 터치해서 상품찾기를 시작해주세요"
+                        android:textColor="@color/text_primary"
+                        android:textSize="22sp"
+                        android:lineSpacingExtra="8dp" />
+
+                    <ProgressBar
+                        android:id="@+id/sttProgress"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|center_horizontal"
+                        android:layout_marginBottom="48dp"
+                        android:indeterminateTint="@color/accent_warm"
+                        android:visibility="gone" />
+                </FrameLayout>
+
+                <!-- ========== 카메라 화면 ========== -->
+                <FrameLayout
+                    android:id="@+id/cameraContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone">
+
+                    <androidx.camera.view.PreviewView
+                        android:id="@+id/previewView"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
+                    <com.example.grabitTest.OverlayView
+                        android:id="@+id/overlayView"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+                </FrameLayout>
             </FrameLayout>
 
-            <!-- ========== 카메라 화면 (화면의 3/4 영역, 고정) ========== -->
-            <FrameLayout
-                android:id="@+id/cameraContainer"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toTopOf="@id/guideline75"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-                <androidx.camera.view.PreviewView
-                    android:id="@+id/previewView"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-
-                <com.example.grabitTest.OverlayView
-                    android:id="@+id/overlayView"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-            </FrameLayout>
-
-            <!-- 하단 상태 패널 (1/4) -->
+            <!-- 하단 상태 패널 (가이드라인~메시지 박스 위까지) -->
             <ScrollView
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:fillViewport="true"
                 app:layout_constraintTop_toBottomOf="@id/guideline75"
-                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintBottom_toTopOf="@id/messageOverlayBottom"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent">
 
@@ -98,54 +101,6 @@
                 android:orientation="vertical"
                 android:padding="16dp"
                 android:background="@color/ivory_panel">
-
-                <!-- 시스템 메시지 (앱 안내·질문·상태) -->
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="시스템 메시지"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05" />
-                <TextView
-                    android:id="@+id/systemMessageText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:minHeight="48dp"
-                    android:background="@color/ivory_card"
-                    android:padding="12dp"
-                    android:text=""
-                    android:textColor="@color/text_primary"
-                    android:textSize="20sp"
-                    android:lineSpacingExtra="4dp"
-                    android:visibility="visible" />
-
-                <!-- 내가 말한 메시지 (음성 인식 결과) -->
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="내가 말한 메시지"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05" />
-                <TextView
-                    android:id="@+id/userSpeechText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:minHeight="48dp"
-                    android:background="@color/ivory_card"
-                    android:padding="12dp"
-                    android:text=""
-                    android:textColor="@color/accent_warm"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:lineSpacingExtra="4dp"
-                    android:visibility="visible" />
 
                 <Button
                     android:id="@+id/startSearchBtn"
@@ -197,7 +152,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:gravity="center_vertical"
+                    android:visibility="gone">
 
                     <Button
                         android:id="@+id/confirmBtn"
@@ -245,6 +201,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
+                    android:visibility="gone"
                     android:text="FPS: --"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
@@ -255,6 +212,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:visibility="gone"
                     android:text="📦 YOLOX: Waiting..."
                     android:textColor="@color/text_primary"
                     android:textSize="16sp" />
@@ -264,6 +222,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
+                    android:visibility="gone"
                     android:text="📐 자이로: OFF"
                     android:textColor="@color/text_primary"
                     android:textSize="16sp" />
@@ -273,12 +232,86 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
+                    android:visibility="gone"
                     android:text="⏱️ Inference: -- ms"
                     android:textColor="@color/accent_warm"
                     android:textSize="14sp" />
             </LinearLayout>
 
             </ScrollView>
+
+            <!-- 시스템/내가 말한 메시지 — 화면 맨 아래, 너비 100% (내비게이션 바와 겹치지 않도록 하단 여백) -->
+            <LinearLayout
+                android:id="@+id/messageOverlayBottom"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="56dp"
+                android:orientation="vertical"
+                android:background="@drawable/bg_message_panel"
+                android:padding="10dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <TextView
+                    android:id="@+id/searchTargetLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_message_card"
+                    android:padding="8dp"
+                    android:text="찾는 품목: —"
+                    android:textColor="@color/accent_warm"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="시스템 메시지"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/systemMessageText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:minHeight="40dp"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_message_card"
+                    android:padding="8dp"
+                    android:text=""
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:maxLines="3"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="내가 말한 메시지"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/userSpeechText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:minHeight="40dp"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_message_card"
+                    android:padding="8dp"
+                    android:text=""
+                    android:textColor="@color/accent_warm"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
+            </LinearLayout>
 
             <!-- 좌측 상단 햄버거 버튼 -->
             <ImageButton
