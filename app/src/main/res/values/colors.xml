@@ -2,4 +2,15 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- 아이보리 테마 -->
+    <color name="ivory_background">#FFFBF7</color>
+    <color name="ivory_panel">#F5EFE6</color>
+    <color name="ivory_card">#F0EAE0</color>
+    <color name="ivory_divider">#E5DED4</color>
+    <color name="text_primary">#3D3632</color>
+    <color name="text_secondary">#5C5348</color>
+    <color name="accent_warm">#8B7355</color>
+    <color name="accent_warm_light">#A89078</color>
+    <color name="overlay_ivory">#22E5DED4</color>
 </resources>

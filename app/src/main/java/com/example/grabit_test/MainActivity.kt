@@ -1,8 +1,10 @@
 package com.example.grabitTest
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -12,6 +14,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -148,11 +151,24 @@ class MainActivity : AppCompatActivity() {
     /** near-contact 후 질문(STT) 플로우가 이미 진행 중인지 여부 (중복 트리거 방지) */
     private var touchConfirmInProgress = false
 
+    /** 볼륨 업 길게 누르기 → 재시작. 짧게 누르면 볼륨만 조정 */
+    private val VOLUME_LONG_PRESS_MS = 600L
+    private val volumeLongPressHandler = Handler(Looper.getMainLooper())
+    private var volumeUpLongPressRunnable: Runnable? = null
+    private var volumeUpLongPressFired = false
+    /** 키 반복(KEY_DOWN 연속) 시 runnable 중복 등록 방지 */
+    private var volumeUpKeyDownScheduled = false
+
+    /** 볼륨 다운 길게 누르기 → TTS 중지 후 바로 음성인식(STT) 시작 */
+    private var volumeDownLongPressRunnable: Runnable? = null
+    private var volumeDownLongPressFired = false
+    private var volumeDownKeyDownScheduled = false
+
     // ---------- near-contact(touch) 판정 (시각장애인 UX, 현장 튜닝 포인트) ----------
-    /** 타겟 박스 확장 비율 (0.1~0.2). 확장된 박스 안에 엄지·검지 중간점이 있으면 touch */
-    private val TOUCH_BOX_EXPAND_RATIO = 0.15f
-    /** touch=true 연속 N프레임이면 touchActive 전환 + TTS 1회 */
-    private val TOUCH_CONFIRM_FRAMES = 6
+    /** 타겟 박스 확장 비율. 확장된 박스 안에 엄지·검지 중간점이 있으면 touch (넓을수록 잡기 판정 수월) */
+    private val TOUCH_BOX_EXPAND_RATIO = 0.22f
+    /** touch=true 연속 N프레임이면 touchActive 전환 + TTS 1회 (낮을수록 빨리 잡았다고 인정) */
+    private val TOUCH_CONFIRM_FRAMES = 4
     /** touch=false 연속 N프레임이면 touchActive 해제 (즉시 해제 방지) */
     private val RELEASE_HOLD_FRAMES = 10
     /** TTS 재발화 쿨다운(ms). 이 시간 동안은 재트리거 금지 */
@@ -301,8 +317,65 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "준비 중입니다. 잠시 후 다시 터치해주세요.", Toast.LENGTH_SHORT).show()
             return
         }
-        // 화면 터치 시에만 마이크 켜고 상품명 입력 받기
+        // 볼륨 업 길게 누르기 시 마이크 켜고 상품명 입력 받기
         voiceFlowController?.startProductNameInput()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> {
+                when (event.action) {
+                    KeyEvent.ACTION_DOWN -> {
+                        if (volumeUpKeyDownScheduled) return true
+                        volumeUpKeyDownScheduled = true
+                        volumeUpLongPressFired = false
+                        volumeUpLongPressRunnable = Runnable {
+                            volumeUpLongPressFired = true
+                            runOnUiThread { onFirstScreenClicked() }
+                        }
+                        volumeLongPressHandler.postDelayed(volumeUpLongPressRunnable!!, VOLUME_LONG_PRESS_MS)
+                        return true
+                    }
+                    KeyEvent.ACTION_UP -> {
+                        volumeUpKeyDownScheduled = false
+                        volumeLongPressHandler.removeCallbacks(volumeUpLongPressRunnable ?: return true)
+                        if (!volumeUpLongPressFired) {
+                            (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                                ?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
+                        }
+                        return true
+                    }
+                }
+            }
+            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                when (event.action) {
+                    KeyEvent.ACTION_DOWN -> {
+                        if (volumeDownKeyDownScheduled) return true
+                        volumeDownKeyDownScheduled = true
+                        volumeDownLongPressFired = false
+                        volumeDownLongPressRunnable = Runnable {
+                            volumeDownLongPressFired = true
+                            runOnUiThread {
+                                ttsManager?.stop()
+                                sttManager?.startListening()
+                            }
+                        }
+                        volumeLongPressHandler.postDelayed(volumeDownLongPressRunnable!!, VOLUME_LONG_PRESS_MS)
+                        return true
+                    }
+                    KeyEvent.ACTION_UP -> {
+                        volumeDownKeyDownScheduled = false
+                        volumeLongPressHandler.removeCallbacks(volumeDownLongPressRunnable ?: return true)
+                        if (!volumeDownLongPressFired) {
+                            (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                                ?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
+                        }
+                        return true
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun initSttTts() {
@@ -324,17 +397,12 @@ class MainActivity : AppCompatActivity() {
                 if (success && beepPlayer != null) {
                     voiceFlowController = VoiceFlowController(
                         ttsManager = ttsManager!!,
-                        beepPlayer = beepPlayer!!,
                         onStateChanged = { _, _ -> runOnUiThread { updateVoiceFlowButtonVisibility() } },
                         onSystemAnnounce = { msg -> runOnUiThread { binding.sttResultText.text = "🔊 $msg" } },
                         onRequestStartStt = {
                     runOnUiThread {
-                        // 삐 소리 후 오디오 정착 시간 확보 (마이크 미작동/인식 실패 방지)
-                        Log.d("STT", "MainActivity: onRequestStartStt() → will call startListening after 350ms (voice flow)")
-                        binding.root.postDelayed({
-                            Log.d("STT", "MainActivity: onRequestStartStt() delayed → startListening()")
-                            sttManager?.startListening()
-                        }, 350L)
+                        Log.d("STT", "MainActivity: onRequestStartStt() → startListening() (0ms)")
+                        sttManager?.startListening()
                     }
                 },
                         onStartSearch = { productName -> runOnUiThread { onStartSearchFromVoiceFlow(productName) } },
@@ -422,7 +490,13 @@ class MainActivity : AppCompatActivity() {
                     if (listening) binding.sttResultText.text = "🎤 듣는 중..."
                     updateVoiceFlowButtonVisibility()
                 }
-            }
+            },
+            onPartialResult = { text ->
+                runOnUiThread {
+                    binding.sttResultText.text = "🎤 인식 중: $text"
+                }
+            },
+            beepPlayer = beepPlayer
         ).also { if (it.init()) Log.d(TAG, "STT 초기화 완료") }
     }
 
@@ -516,11 +590,12 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
-    /** TOUCH_CONFIRM: near-contact 후 "상품에 닿았나요?" 질문에 대한 응답 처리 */
+    /** TOUCH_CONFIRM: near-contact 후 "상품에 닿았나요?" 질문에 대한 응답 처리 (STT가 "네"→"내"로 인식하는 경우 포함) */
     private fun handleTouchConfirmYesNo(text: String) {
         val t = text.trim().lowercase().replace(" ", "")
-        val isYes = t.contains("예") || t.contains("네") || t.contains("응") ||
-            t.contains("맞") || t == "yes" || t == "y"
+        val isYes = t.contains("예") || t.contains("네") || t.contains("내") || t.contains("응") ||
+            t.contains("맞") || t.contains("그래") || t.contains("좋아") ||
+            t == "yes" || t == "y"
         if (isYes) {
             Log.d(TAG, "[TOUCH_CONFIRM] POSITIVE, reset to IDLE")
             speak(VoicePrompts.PROMPT_DONE) {

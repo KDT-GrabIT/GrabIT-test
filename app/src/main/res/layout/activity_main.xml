@@ -5,7 +5,7 @@
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="@color/ivory_background">
 
     <!-- 메인 콘텐츠 -->
     <FrameLayout
@@ -29,7 +29,7 @@
                 android:id="@+id/firstScreen"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
-                android:background="#1a1a2e"
+                android:background="@color/ivory_card"
                 android:clickable="true"
                 android:focusable="true"
                 app:layout_constraintTop_toTopOf="parent"
@@ -45,7 +45,7 @@
                     android:gravity="center"
                     android:padding="32dp"
                     android:text="화면을 터치해서 상품찾기를 시작해주세요"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/text_primary"
                     android:textSize="22sp"
                     android:lineSpacingExtra="8dp" />
 
@@ -55,7 +55,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="bottom|center_horizontal"
                     android:layout_marginBottom="48dp"
-                    android:indeterminateTint="#4CAF50"
+                    android:indeterminateTint="@color/accent_warm"
                     android:visibility="gone" />
             </FrameLayout>
 
@@ -88,7 +88,7 @@
                 android:layout_height="0dp"
                 android:orientation="vertical"
                 android:padding="12dp"
-                android:background="#CC000000"
+                android:background="@color/ivory_panel"
                 app:layout_constraintTop_toBottomOf="@id/guideline75"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -113,7 +113,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="타겟: "
-                        android:textColor="#FFFFFF"
+                        android:textColor="@color/text_primary"
                         android:textSize="14sp" />
 
                     <Spinner
@@ -137,7 +137,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text=""
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/text_primary"
                     android:textSize="14sp" />
 
                 <LinearLayout
@@ -185,10 +185,10 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:background="#33000000"
+                    android:background="@color/overlay_ivory"
                     android:padding="8dp"
                     android:text="🎤 인식된 음성 텍스트가 여기 표시됩니다"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:visibility="visible" />
 
@@ -198,7 +198,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="FPS: --"
-                    android:textColor="#00FF00"
+                    android:textColor="@color/text_secondary"
                     android:textSize="14sp"
                     android:fontFamily="monospace" />
 
@@ -208,7 +208,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="📦 YOLOX: Waiting..."
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/text_primary"
                     android:textSize="16sp" />
 
                 <TextView
@@ -217,7 +217,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="📐 자이로: OFF"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/text_primary"
                     android:textSize="16sp" />
 
                 <TextView
@@ -226,7 +226,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="⏱️ Inference: -- ms"
-                    android:textColor="#FFAA00"
+                    android:textColor="@color/accent_warm"
                     android:textSize="14sp" />
             </LinearLayout>
 
@@ -262,7 +262,7 @@
         android:layout_width="280dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="#1a1a2e">
+        android:background="@color/ivory_card">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -274,7 +274,7 @@
                 android:layout_height="wrap_content"
                 android:padding="20dp"
                 android:text="찾을 수 있는 품목"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/text_primary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
@@ -282,7 +282,7 @@
                 android:id="@+id/productListView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:divider="#333333"
+                android:divider="@color/ivory_divider"
                 android:dividerHeight="1dp" />
         </LinearLayout>
     </FrameLayout>

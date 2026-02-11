@@ -11,7 +11,6 @@ import com.example.grabitTest.data.synonym.SynonymRepository
  */
 class VoiceFlowController(
     private val ttsManager: TTSManager,
-    private val beepPlayer: BeepPlayer,
     private val onStateChanged: (VoiceFlowState, String) -> Unit,
     private val onSystemAnnounce: (String) -> Unit = {},
     private val onRequestStartStt: () -> Unit,
@@ -65,13 +64,11 @@ class VoiceFlowController(
         transitionTo(VoiceFlowState.APP_START)
     }
 
-    /** 화면 터치 후 호출: 찾으시는 상품을 말씀해주세요 → 삐 → STT 시작 */
+    /** 화면 터치 후 호출: 찾으시는 상품을 말씀해주세요 → STT 시작 (STT에서 "삐 소리가 나면 말씀해주세요" + 삐 재생) */
     fun startProductNameInput() {
         transitionTo(VoiceFlowState.WAITING_PRODUCT_NAME)
         speak(MSG_ASK_PRODUCT) {
-            beepPlayer.playBeep {
-                onRequestStartStt()
-            }
+            onRequestStartStt()
         }
     }
 
@@ -110,10 +107,8 @@ class VoiceFlowController(
                 onProductNameEntered(currentProductName)
                 val msg = msgConfirmProduct(currentProductName)
                 speak(msg) {
-                    beepPlayer.playBeep {
-                        transitionTo(VoiceFlowState.WAITING_CONFIRMATION)
-                        onRequestStartStt()
-                    }
+                    transitionTo(VoiceFlowState.WAITING_CONFIRMATION)
+                    onRequestStartStt()
                 }
             }
         }
@@ -151,8 +146,9 @@ class VoiceFlowController(
             return SynonymRepository.isYesAnswer(text)
         }
         val t = text.trim().lowercase().replace(" ", "")
-        return t.contains("예") || t.contains("네") || t.contains("맞") || t.contains("응") ||
-            t == "yes" || t == "y" || t.contains("그래") || t.contains("좋아")
+        return t.contains("예") || t.contains("네") || t.contains("내") || t.contains("맞") || t.contains("응") ||
+            t == "yes" || t == "y" || t.contains("그래") || t.contains("좋아") ||
+            t == "네" || t == "내" || t == "예"
     }
 
     private fun isConfirmationNo(text: String): Boolean {
@@ -194,17 +190,13 @@ class VoiceFlowController(
                 currentProductName = ""
                 transitionTo(VoiceFlowState.WAITING_PRODUCT_NAME)
                 speak(MSG_ASK_PRODUCT) {
-                    beepPlayer.playBeep {
-                        onRequestStartStt()
-                    }
+                    onRequestStartStt()
                 }
             }
             VoiceFlowState.SEARCH_FAILED -> {
                 transitionTo(VoiceFlowState.WAITING_PRODUCT_NAME)
                 speak(MSG_ASK_PRODUCT) {
-                    beepPlayer.playBeep {
-                        onRequestStartStt()
-                    }
+                    onRequestStartStt()
                 }
             }
             else -> {}
@@ -261,9 +253,7 @@ class VoiceFlowController(
         if (currentState != VoiceFlowState.SEARCH_FAILED && currentState != VoiceFlowState.SEARCH_RESULT) return
         transitionTo(VoiceFlowState.WAITING_PRODUCT_NAME)
         speak(MSG_ASK_PRODUCT) {
-            beepPlayer.playBeep {
-                onRequestStartStt()
-            }
+            onRequestStartStt()
         }
     }
 

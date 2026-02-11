@@ -1,8 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
     <style name="Base.Theme.GrabIT_Test" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="colorPrimary">@color/accent_warm</item>
+        <item name="colorPrimaryContainer">@color/ivory_card</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="android:statusBarColor">@color/ivory_panel</item>
+        <item name="android:navigationBarColor">@color/ivory_background</item>
+        <item name="android:windowBackground">@color/ivory_background</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
     <style name="Theme.GrabIT_Test" parent="Base.Theme.GrabIT_Test" />
