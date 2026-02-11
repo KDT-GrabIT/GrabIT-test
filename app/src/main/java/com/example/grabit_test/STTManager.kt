@@ -249,11 +249,9 @@ class STTManager(
 
         override fun onPartialResults(partialResults: Bundle?) {
             val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            val text = matches?.firstOrNull()?.trim()
-            if (!text.isNullOrBlank()) {
-                lastPartialText = text
-                onPartialResult?.invoke(text)
-            }
+            val text = matches?.firstOrNull()?.trim() ?: ""
+            if (text.isNotBlank()) lastPartialText = text
+            onPartialResult?.invoke(text)
             Log.d(
                 TAG,
                 "STT_CB onPartialResults rawList=$matches lastPartialText='$lastPartialText' ts=${System.currentTimeMillis()}"

@@ -82,17 +82,70 @@
             </FrameLayout>
 
             <!-- 하단 상태 패널 (1/4) -->
-            <LinearLayout
-                android:id="@+id/statusPanel"
+            <ScrollView
                 android:layout_width="0dp"
                 android:layout_height="0dp"
-                android:orientation="vertical"
-                android:padding="12dp"
-                android:background="@color/ivory_panel"
+                android:fillViewport="true"
                 app:layout_constraintTop_toBottomOf="@id/guideline75"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:id="@+id/statusPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="@color/ivory_panel">
+
+                <!-- 시스템 메시지 (앱 안내·질문·상태) -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="시스템 메시지"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05" />
+                <TextView
+                    android:id="@+id/systemMessageText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:minHeight="48dp"
+                    android:background="@color/ivory_card"
+                    android:padding="12dp"
+                    android:text=""
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp"
+                    android:lineSpacingExtra="4dp"
+                    android:visibility="visible" />
+
+                <!-- 내가 말한 메시지 (음성 인식 결과) -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="내가 말한 메시지"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05" />
+                <TextView
+                    android:id="@+id/userSpeechText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:minHeight="48dp"
+                    android:background="@color/ivory_card"
+                    android:padding="12dp"
+                    android:text=""
+                    android:textColor="@color/accent_warm"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:lineSpacingExtra="4dp"
+                    android:visibility="visible" />
 
                 <Button
                     android:id="@+id/startSearchBtn"
@@ -184,13 +237,8 @@
                     android:id="@+id/sttResultText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@color/overlay_ivory"
-                    android:padding="8dp"
-                    android:text="🎤 인식된 음성 텍스트가 여기 표시됩니다"
-                    android:textColor="@color/text_primary"
-                    android:textSize="14sp"
-                    android:visibility="visible" />
+                    android:layout_marginTop="4dp"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/fpsText"
@@ -229,6 +277,8 @@
                     android:textColor="@color/accent_warm"
                     android:textSize="14sp" />
             </LinearLayout>
+
+            </ScrollView>
 
             <!-- 좌측 상단 햄버거 버튼 -->
             <ImageButton
