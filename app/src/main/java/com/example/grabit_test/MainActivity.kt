@@ -73,23 +73,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private var camera: Camera? = null
 
-    // 능동형 자동 줌 (기존)
-    private var isAutoZooming = false
-    private var lastZoomTime = 0L
-    private val ZOOM_COOLDOWN_MS = 2000L
-    private val ZOOM_RESET_DELAY_MS = 1500L
-    private val SUSPECTED_CONF_MIN = 0.3f
-    private val SUSPECTED_CONF_MAX = 0.5f
-    private val SMALL_BOX_AREA_RATIO = 0.05f
-    private val zoomResetHandler = Handler(Looper.getMainLooper())
-    private var zoomResetRunnable: Runnable? = null
     @Volatile private var currentZoomRatio = 1f
 
-    // 자동 탐색(Auto-Scan) 모드: 1.0x ↔ 2.5x 반복 (시각장애인용)
+    // 자동 탐색(Auto-Scan): SEARCHING 시 1.0x(기본) ↔ 2.5x, 기본은 1.0x
     private val scanHandler = Handler(Looper.getMainLooper())
     private var isScanning = false
     private var isZoomedIn = false
-    private val SCAN_INTERVAL_MS = 1500L
+    private val SCAN_INITIAL_DELAY_MS = 3000L   // 최초 3초 탐색 유예
+    private val SCAN_ZOOM_IN_MS = 800L          // 2.5x 유지 시간 (짧게)
+    private val SCAN_ZOOM_OUT_MS = 1500L        // 1.0x 유지 시간
 
     // AI 모델
     private var yoloxInterpreter: Interpreter? = null
@@ -134,6 +126,13 @@ class MainActivity : AppCompatActivity() {
 
     private val TARGET_CONFIDENCE_THRESHOLD = 0.5f  // 50% 이상 확신 시 고정 (탐지 용이하게 완화)
     private val currentTargetLabel = AtomicReference<String>("")
+
+    // 거리 유도 (LOCKED): 줌 Always Decay, "더 가까이"는 줌 1.2x 이하 & 박스 작을 때만
+    private var lastGuidanceTime = 0L
+    private var lastZoomDecayTime = 0L
+    private val TARGET_BOX_RATIO = 0.2f
+    private val GUIDANCE_COOLDOWN_MS = 3000L
+    private val ZOOM_DECAY_INTERVAL_MS = 80L
 
     // STT / TTS
     private var sttManager: STTManager? = null
@@ -732,7 +731,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopCamera() {
         stopScanning()
-        cancelZoomReset()
         try {
             ProcessCameraProvider.getInstance(this).get().unbindAll()
             camera = null
@@ -755,14 +753,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun cancelZoomReset() {
-        zoomResetRunnable?.let { zoomResetHandler.removeCallbacks(it) }
-        zoomResetRunnable = null
-    }
-
     private var scanRunnable: Runnable? = null
 
-    /** 자동 탐색 시작: SEARCHING 상태에서 1.5초마다 1.0x ↔ 2.5x 전환 */
+    /** 자동 탐색: SEARCHING 시 1.0x(기본) ↔ 2.5x, 2.5x는 짧게 유지 후 바로 1.0x 복귀 */
     private fun startScanning() {
         if (isScanning) return
         if (screenState != ScreenState.CAMERA_SCREEN) return
@@ -779,16 +772,17 @@ class MainActivity : AppCompatActivity() {
                 val ratio = if (isZoomedIn) 2.5f else 1.0f
                 c.cameraControl.setZoomRatio(ratio)
                 currentZoomRatio = ratio
-                scanHandler.postDelayed(this, SCAN_INTERVAL_MS)
+                val delay = if (isZoomedIn) SCAN_ZOOM_IN_MS else SCAN_ZOOM_OUT_MS
+                scanHandler.postDelayed(this, delay)
             }
         }
-        scanHandler.postDelayed(scanRunnable!!, SCAN_INTERVAL_MS)
+        scanHandler.postDelayed(scanRunnable!!, SCAN_ZOOM_OUT_MS)
     }
 
     /** 자동 탐색 중단 (물체 발견 시 또는 LOCKED 진입 시) */
     private fun stopScanning() {
         isScanning = false
-        scanRunnable?.let { scanHandler.removeCallbacks(it) }
+        scanHandler.removeCallbacksAndMessages(null)
         scanRunnable = null
     }
 
@@ -1028,6 +1022,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** LOCKED: 줌 Always Decay (1.0x까지). "더 가까이" TTS는 줌<=1.2x & 박스<20%일 때만 */
+    private fun processDistanceGuidance(box: OverlayView.DetectionBox, imageWidth: Int, imageHeight: Int) {
+        val cam = camera ?: return
+        val totalArea = imageWidth * imageHeight
+        if (totalArea <= 0) return
+        val boxRatio = (box.rect.width() * box.rect.height()) / totalArea
+        val zoom = currentZoomRatio
+        val now = System.currentTimeMillis()
+
+        runOnUiThread {
+            val newZoom = max(1.0f, currentZoomRatio * 0.95f)
+            if (currentZoomRatio > 1.0f && now - lastZoomDecayTime >= ZOOM_DECAY_INTERVAL_MS) {
+                lastZoomDecayTime = now
+                cam.cameraControl.setZoomRatio(newZoom)
+                currentZoomRatio = newZoom
+            }
+            if (zoom <= 1.2f && boxRatio < TARGET_BOX_RATIO && now - lastGuidanceTime >= GUIDANCE_COOLDOWN_MS) {
+                lastGuidanceTime = now
+                speak("조금 더 앞으로 오세요")
+            }
+        }
+    }
+
     /** LOCKED 시 시각 보정: 자이로 예측 위치 또는 이전 박스와 가장 가까운 타겟 반환 (Gyro-Guided Matching)
      * @param minConfidence occlusion 시 더 낮은 기준 사용 (예: 0.15f) */
     private fun findTrackedTarget(
@@ -1186,6 +1203,8 @@ class MainActivity : AppCompatActivity() {
             touchActive = false
             lastTouchMidpointPx = null
             lastTouchTtsTimeMs = 0L
+            lastGuidanceTime = 0L
+            lastZoomDecayTime = 0L
             latestHandsResult.set(null)  // SEARCHING 진입 시 손 데이터 초기화 (재락 시 새 데이터만 사용)
             opticalFlowTracker.reset()
             gyroManager.stopTracking()
@@ -1317,7 +1336,8 @@ class MainActivity : AppCompatActivity() {
                     this, cameraSelector, preview, imageAnalyzer
                 )
                 currentZoomRatio = 1f
-                startScanning()
+                camera?.cameraControl?.setZoomRatio(1.0f)
+                scanHandler.postDelayed({ startScanning() }, SCAN_INITIAL_DELAY_MS)
             } catch (e: Exception) {
                 Log.e(TAG, "카메라 바인딩 실패", e)
             }
@@ -1527,6 +1547,9 @@ class MainActivity : AppCompatActivity() {
                     wasOccluded = handsOverlap
 
                     val box = frozenBox
+                    if (box != null && frozenImageWidth > 0 && frozenImageHeight > 0) {
+                        processDistanceGuidance(box, frozenImageWidth, frozenImageHeight)
+                    }
                     val boxes = if (box != null) listOf(box) else emptyList()
                     displayResults(boxes, inferMs, frozenImageWidth, frozenImageHeight)
                 }
