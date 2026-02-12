@@ -60,10 +60,8 @@ dependencies {
     // 1. MediaPipe 0.10.26 (16KB 지원)
     implementation("com.google.mediapipe:tasks-vision:0.10.26")
 
-    // 2. CameraX 1.4.1
-    implementation("androidx.camera:camera-camera2:1.4.1")
-    implementation("androidx.camera:camera-lifecycle:1.4.1")
-    implementation("androidx.camera:camera-view:1.4.1")
+    // 2. ARCore (Depth API, 세션 기반 카메라)
+    implementation("com.google.ar:core:1.52.0")
 
     // 3. LiteRT (16KB 지원)
     implementation("com.google.ai.edge.litert:litert:1.4.1")

@@ -22,20 +22,19 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.Camera
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.resolutionselector.ResolutionSelector
-import androidx.camera.core.resolutionselector.ResolutionStrategy
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
+import com.google.ar.core.Config
+import com.google.ar.core.Coordinates2d
+import com.google.ar.core.Frame
+import com.google.ar.core.Session
+import com.google.ar.core.exceptions.NotYetAvailableException
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.graphics.RectF
-import android.util.Size
+import android.view.Surface
+import android.media.Image
+import java.nio.ByteOrder
 import com.example.grabitTest.databinding.ActivityMainBinding
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -70,18 +69,15 @@ import kotlin.math.sqrt
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var cameraExecutor: ExecutorService
-    private var camera: Camera? = null
+    private val arExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private var arSession: Session? = null
+    @Volatile private var arRunning = false
+    private var displayRotationDegrees = 0
 
-    @Volatile private var currentZoomRatio = 1f
-
-    // 자동 탐색(Auto-Scan): SEARCHING 시 1.0x(기본) ↔ 2.5x, 기본은 1.0x
+    // 자동 탐색 메시지 (ARCore에는 줌 없음; 거리 > 2000mm 시 "너무 멂" 안내)
     private val scanHandler = Handler(Looper.getMainLooper())
     private var isScanning = false
-    private var isZoomedIn = false
-    private val SCAN_INITIAL_DELAY_MS = 3000L   // 최초 3초 탐색 유예
-    private val SCAN_ZOOM_IN_MS = 800L          // 2.5x 유지 시간 (짧게)
-    private val SCAN_ZOOM_OUT_MS = 1500L        // 1.0x 유지 시간
+    private val SCAN_INITIAL_DELAY_MS = 3000L
 
     // AI 모델
     private var yoloxInterpreter: Interpreter? = null
@@ -127,12 +123,11 @@ class MainActivity : AppCompatActivity() {
     private val TARGET_CONFIDENCE_THRESHOLD = 0.5f  // 50% 이상 확신 시 고정 (탐지 용이하게 완화)
     private val currentTargetLabel = AtomicReference<String>("")
 
-    // 거리 유도 (LOCKED): 줌 Always Decay, "더 가까이"는 줌 1.2x 이하 & 박스 작을 때만
+    // 거리 유도 (LOCKED): ARCore Depth API 실제 거리(mm) 기반
     private var lastGuidanceTime = 0L
-    private var lastZoomDecayTime = 0L
-    private val TARGET_BOX_RATIO = 0.2f
+    private val DISTANCE_NEAR_MM = 600
+    private val DISTANCE_FAR_MM = 2000
     private val GUIDANCE_COOLDOWN_MS = 3000L
-    private val ZOOM_DECAY_INTERVAL_MS = 80L
 
     // STT / TTS
     private var sttManager: STTManager? = null
@@ -237,8 +232,6 @@ class MainActivity : AppCompatActivity() {
         }
         binding.root.requestApplyInsets()
 
-        cameraExecutor = Executors.newSingleThreadExecutor()
-
         loadClassLabels()
         ProductDictionary.load(this)
         loadSynonymFromRemote()
@@ -342,7 +335,7 @@ class MainActivity : AppCompatActivity() {
     /** 우측 하단 '첫 화면' 버튼: 카메라 끄고 첫 화면으로 */
     private fun goToFirstScreen() {
         transitionToSearching()
-        stopCamera()
+        stopArSession()
         speak("첫 화면으로 돌아갑니다.") {
             runOnUiThread {
                 showFirstScreen()
@@ -360,7 +353,7 @@ class MainActivity : AppCompatActivity() {
         updateSearchTargetLabel()
         binding.systemMessageText.text = "찾는 중: ${getTargetLabel()}"
         binding.statusText.text = "찾는 중: ${getTargetLabel()}"
-        startCamera()
+        startArSession()
     }
 
     private fun onFirstScreenClicked() {
@@ -703,7 +696,7 @@ class MainActivity : AppCompatActivity() {
         binding.overlayView.visibility = View.VISIBLE
         binding.systemMessageText.text = "찾는 중: ${getTargetLabel()}"
         binding.statusText.text = "찾는 중: ${getTargetLabel()}"
-        startCamera()
+        startArSession()
         startSearchTimeout()
     }
 
@@ -729,54 +722,29 @@ class MainActivity : AppCompatActivity() {
         if (idx >= 0) binding.targetSpinner.setSelection(idx)
     }
 
-    private fun stopCamera() {
+    private fun stopArSession() {
         stopScanning()
+        arRunning = false
+        arExecutor.execute {} // drain
         try {
-            ProcessCameraProvider.getInstance(this).get().unbindAll()
-            camera = null
+            arSession?.close()
+            arSession = null
         } catch (_: Exception) {}
     }
 
     private fun setupPinchZoom() {
-        val detector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val cam = camera ?: return false
-                val newZoom = (currentZoomRatio * detector.scaleFactor).coerceIn(1f, 10f)
-                currentZoomRatio = newZoom
-                cam.cameraControl.setZoomRatio(newZoom)
-                return true
-            }
-        })
-        binding.previewView.setOnTouchListener { _, event ->
-            detector.onTouchEvent(event)
-            false
-        }
+        // ARCore 세션에서는 카메라 줌 제어 없음 (무시)
     }
 
     private var scanRunnable: Runnable? = null
 
-    /** 자동 탐색: SEARCHING 시 1.0x(기본) ↔ 2.5x, 2.5x는 짧게 유지 후 바로 1.0x 복귀 */
+    /** 자동 탐색 메시지: 거리 > 2000mm 시 "너무 멂" 표시 (ARCore에는 줌 없음) */
     private fun startScanning() {
         if (isScanning) return
         if (screenState != ScreenState.CAMERA_SCREEN) return
         if (searchState != SearchState.SEARCHING) return
         if (!hasSpecificTarget()) return
-        if (camera == null) return
         isScanning = true
-        isZoomedIn = false
-        scanRunnable = object : Runnable {
-            override fun run() {
-                if (!isScanning || searchState != SearchState.SEARCHING) return
-                val c = camera ?: run { isScanning = false; return }
-                isZoomedIn = !isZoomedIn
-                val ratio = if (isZoomedIn) 2.5f else 1.0f
-                c.cameraControl.setZoomRatio(ratio)
-                currentZoomRatio = ratio
-                val delay = if (isZoomedIn) SCAN_ZOOM_IN_MS else SCAN_ZOOM_OUT_MS
-                scanHandler.postDelayed(this, delay)
-            }
-        }
-        scanHandler.postDelayed(scanRunnable!!, SCAN_ZOOM_OUT_MS)
     }
 
     /** 자동 탐색 중단 (물체 발견 시 또는 LOCKED 진입 시) */
@@ -860,7 +828,7 @@ class MainActivity : AppCompatActivity() {
             touchFrameCount = 0
             releaseFrameCount = 0
             transitionToSearching()
-            stopCamera()
+            stopArSession()
             showFirstScreen()
             // 선택: IDLE 안내 TTS
             playWelcomeTTS()
@@ -1008,39 +976,41 @@ class MainActivity : AppCompatActivity() {
     /** 특정 상품이 선택된 경우만 true. 비어 있으면 탐지 시작 안 함. */
     private fun hasSpecificTarget(): Boolean = getTargetLabel().isNotEmpty()
 
-    /** 물체 발견 시 자동 탐색 중단 (현재 줌 유지). Auto-Scan 모드가 1.0x↔2.5x 토글을 담당. */
+    /** 물체 발견 시 자동 탐색 메시지 중단 */
     private fun processAutoZoom(detections: List<OverlayView.DetectionBox>, imageWidth: Int, imageHeight: Int) {
         val target = getTargetLabel().trim()
         if (target.isBlank()) return
-
         val confident = detections.any { d ->
             (d.label.equals(target, true) || d.topLabels.any { it.first.equals(target, true) }) &&
                 d.confidence >= TARGET_CONFIDENCE_THRESHOLD
         }
-        if (confident) {
-            stopScanning()
-        }
+        if (confident) stopScanning()
     }
 
-    /** LOCKED: 줌 Always Decay (1.0x까지). "더 가까이" TTS는 줌<=1.2x & 박스<20%일 때만 */
-    private fun processDistanceGuidance(box: OverlayView.DetectionBox, imageWidth: Int, imageHeight: Int) {
-        val cam = camera ?: return
-        val totalArea = imageWidth * imageHeight
-        if (totalArea <= 0) return
-        val boxRatio = (box.rect.width() * box.rect.height()) / totalArea
-        val zoom = currentZoomRatio
+    /**
+     * LOCKED: ARCore Depth API로 측정한 실제 거리(mm) 기반 유도.
+     * - &lt; 600mm: "손을 뻗으세요" (적정 거리)
+     * - 600~2000mm: "더 가까이 오세요"
+     * - &gt; 2000mm: "너무 멂 (자동 줌 탐색)" 메시지
+     */
+    private fun processDistanceGuidanceByDepth(distanceMm: Int?) {
+        if (distanceMm == null) return
         val now = System.currentTimeMillis()
-
+        if (now - lastGuidanceTime < GUIDANCE_COOLDOWN_MS) return
         runOnUiThread {
-            val newZoom = max(1.0f, currentZoomRatio * 0.95f)
-            if (currentZoomRatio > 1.0f && now - lastZoomDecayTime >= ZOOM_DECAY_INTERVAL_MS) {
-                lastZoomDecayTime = now
-                cam.cameraControl.setZoomRatio(newZoom)
-                currentZoomRatio = newZoom
-            }
-            if (zoom <= 1.2f && boxRatio < TARGET_BOX_RATIO && now - lastGuidanceTime >= GUIDANCE_COOLDOWN_MS) {
-                lastGuidanceTime = now
-                speak("조금 더 앞으로 오세요")
+            when {
+                distanceMm < DISTANCE_NEAR_MM -> {
+                    lastGuidanceTime = now
+                    speak("손을 뻗으세요")
+                }
+                distanceMm in DISTANCE_NEAR_MM..DISTANCE_FAR_MM -> {
+                    lastGuidanceTime = now
+                    speak("더 가까이 오세요")
+                }
+                distanceMm > DISTANCE_FAR_MM -> {
+                    lastGuidanceTime = now
+                    speak("너무 멂. 더 가까이 오세요.")
+                }
             }
         }
     }
@@ -1204,7 +1174,6 @@ class MainActivity : AppCompatActivity() {
             lastTouchMidpointPx = null
             lastTouchTtsTimeMs = 0L
             lastGuidanceTime = 0L
-            lastZoomDecayTime = 0L
             latestHandsResult.set(null)  // SEARCHING 진입 시 손 데이터 초기화 (재락 시 새 데이터만 사용)
             opticalFlowTracker.reset()
             gyroManager.stopTracking()
@@ -1303,270 +1272,340 @@ class MainActivity : AppCompatActivity() {
         return buffer
     }
 
-    private fun startCamera() {
-        val resolutionSelector = ResolutionSelector.Builder()
-            .setResolutionStrategy(
-                ResolutionStrategy(
-                    Size(1280, 720),
-                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
-                )
-            )
-            .build()
-
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-
-            val preview = Preview.Builder()
-                .setResolutionSelector(resolutionSelector)
-                .build()
-                .also { it.setSurfaceProvider(binding.previewView.surfaceProvider) }
-
-            val imageAnalyzer = ImageAnalysis.Builder()
-                .setResolutionSelector(resolutionSelector)
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also { it.setAnalyzer(cameraExecutor, ImageAnalyzer()) }
-
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-            try {
-                cameraProvider.unbindAll()
-                camera = cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageAnalyzer
-                )
-                currentZoomRatio = 1f
-                camera?.cameraControl?.setZoomRatio(1.0f)
-                scanHandler.postDelayed({ startScanning() }, SCAN_INITIAL_DELAY_MS)
-            } catch (e: Exception) {
-                Log.e(TAG, "카메라 바인딩 실패", e)
+    /** ARCore 세션 시작: Session 생성, Config(Depth AUTOMATIC), 프레임 루프 시작 */
+    private fun startArSession() {
+        if (arSession != null) return
+        try {
+            val session = Session(this)
+            val config = session.config
+            config.depthMode = Config.DepthMode.AUTOMATIC
+            config.focusMode = Config.FocusMode.AUTO
+            if (!session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                Log.w(TAG, "Depth API 미지원 기기")
             }
-        }, ContextCompat.getMainExecutor(this))
+            session.configure(config)
+            arSession = session
+            arRunning = true
+            scanHandler.postDelayed({ startScanning() }, SCAN_INITIAL_DELAY_MS)
+            binding.previewView.post {
+                updateDisplayGeometry()
+                arExecutor.execute(arFrameLoopRunnable)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "ARCore 세션 시작 실패", e)
+            runOnUiThread {
+                binding.systemMessageText.text = "ARCore 초기화 실패"
+                binding.statusText.text = "ARCore 초기화 실패"
+            }
+        }
     }
 
-    // YOLOX 진단 로그: 3초마다 한 번만 출력 (로그 과다 방지)
+    private fun updateDisplayGeometry() {
+        val session = arSession ?: return
+        val view = binding.previewView
+        if (view.width == 0 || view.height == 0) return
+        val rotation = windowManager.defaultDisplay?.rotation ?: Surface.ROTATION_0
+        displayRotationDegrees = when (rotation) {
+            Surface.ROTATION_0 -> 0
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+        session.setDisplayGeometry(rotation, view.width, view.height)
+    }
+
+    private val arFrameLoopRunnable = Runnable {
+        while (arRunning) {
+            val session = arSession ?: break
+            try {
+                val frame = session.update() ?: continue
+                if (binding.previewView.width == 0 || binding.previewView.height == 0) {
+                    runOnUiThread { updateDisplayGeometry() }
+                    continue
+                }
+                var cameraImage: Image? = null
+                try {
+                    cameraImage = frame.acquireCameraImage()
+                } catch (_: NotYetAvailableException) {
+                    continue
+                } catch (e: Exception) {
+                    Log.e(TAG, "acquireCameraImage 실패", e)
+                    continue
+                }
+                val bitmap = BitmapUtils.yuv420ToBitmap(cameraImage!!)
+                cameraImage.close()
+                cameraImage = null
+                if (bitmap == null) continue
+                val w = bitmap.width
+                val h = bitmap.height
+                val rotatedBitmap = BitmapUtils.rotateBitmap(bitmap, displayRotationDegrees) ?: bitmap
+                if (rotatedBitmap != bitmap) bitmap.recycle()
+                val imageWidth = rotatedBitmap.width
+                val imageHeight = rotatedBitmap.height
+                val startTime = System.currentTimeMillis()
+
+                if (searchState == SearchState.LOCKED) {
+                    sendFrameToHands(rotatedBitmap, frame.timestamp)
+                }
+
+                when (searchState) {
+                    SearchState.SEARCHING -> {
+                        if (!hasSpecificTarget()) {
+                            runOnUiThread { displayResults(emptyList(), 0, imageWidth, imageHeight) }
+                        } else {
+                            val detections = runYOLOX(rotatedBitmap)
+                            processAutoZoom(detections, imageWidth, imageHeight)
+                            val matchResult = findTargetMatch(detections, getTargetLabel())
+                            if (matchResult != null) {
+                                val (matched, actualPrimaryLabel) = matchResult
+                                if (matched.confidence >= TARGET_CONFIDENCE_THRESHOLD) {
+                                    val prev = pendingLockBox
+                                    if (prev != null && prev.label == matched.label &&
+                                        RectF.intersects(matched.rect, prev.rect)) {
+                                        pendingLockCount++
+                                        if (pendingLockCount >= LOCK_CONFIRM_FRAMES) {
+                                            pendingLockBox = null
+                                            pendingLockCount = 0
+                                            runOnUiThread {
+                                                transitionToLocked(matched, imageWidth, imageHeight, actualPrimaryLabel)
+                                                frozenBox = matched
+                                                frozenImageWidth = imageWidth
+                                                frozenImageHeight = imageHeight
+                                                wasOccluded = false
+                                                opticalFlowTracker.reset()
+                                                gyroManager.startTracking(matched.rect, imageWidth, imageHeight)
+                                                lockedFrameCount = 0
+                                                validationFailCount = 0
+                                            }
+                                            displayResults(filterDetectionsByTarget(detections, getTargetLabel()),
+                                                System.currentTimeMillis() - startTime, imageWidth, imageHeight)
+                                            drawPreviewAndUpdateFps(rotatedBitmap)
+                                            continue
+                                        }
+                                    } else {
+                                        pendingLockBox = matched
+                                        pendingLockCount = 1
+                                    }
+                                }
+                            } else {
+                                pendingLockBox = null
+                                pendingLockCount = 0
+                            }
+                            runOnUiThread {
+                                displayResults(filterDetectionsByTarget(detections, getTargetLabel()),
+                                    System.currentTimeMillis() - startTime, imageWidth, imageHeight)
+                            }
+                        }
+                    }
+                    SearchState.LOCKED -> {
+                        lockedFrameCount++
+                        val nowMs = System.currentTimeMillis()
+                        val boxLostDurationMs = nowMs - lastSuccessfulValidationTimeMs
+                        val shouldReacquire = boxLostDurationMs >= REACQUIRE_INFERENCE_AFTER_MS
+                        val shouldValidate = shouldReacquire || (lockedFrameCount % VALIDATION_INTERVAL) == 0
+                        var inferMs = System.currentTimeMillis() - startTime
+                        val box = frozenBox
+                        val handsOverlap = box?.let { isHandOverlappingBox(latestHandsResult.get(), it.rect, imageWidth, imageHeight) } ?: false
+                        val handTouch = box?.let { isHandTouchingTargetBox(latestHandsResult.get(), it.rect, imageWidth, imageHeight) } ?: false
+
+                        if (handTouch) {
+                            touchFrameCount++
+                            releaseFrameCount = 0
+                            if (!touchActive && !touchConfirmInProgress && !touchConfirmScheduled && touchFrameCount >= TOUCH_CONFIRM_FRAMES) {
+                                touchActive = true
+                                val cooldownOk = nowMs - lastTouchTtsTimeMs >= TOUCH_TTS_COOLDOWN_MS
+                                if (cooldownOk) {
+                                    lastTouchTtsTimeMs = nowMs
+                                    touchConfirmScheduled = true
+                                    runOnUiThread {
+                                        stopPositionAnnounce()
+                                        stopHandGuidanceTTS()
+                                        enterTouchConfirm()
+                                    }
+                                }
+                            }
+                        } else {
+                            releaseFrameCount++
+                            if (releaseFrameCount >= RELEASE_HOLD_FRAMES) {
+                                touchActive = false
+                                touchFrameCount = 0
+                            } else touchFrameCount = 0
+                        }
+                        gyroManager.suspendUpdates = handsOverlap
+
+                        if (handsOverlap) {
+                            if (shouldReacquire) {
+                                val detections = runYOLOX(rotatedBitmap)
+                                inferMs = System.currentTimeMillis() - startTime
+                                val tracked = findTrackedTarget(detections, lockedTargetLabel, frozenBox, 0.18f)
+                                if (tracked != null) {
+                                    lastSuccessfulValidationTimeMs = System.currentTimeMillis()
+                                    gyroManager.correctPosition(tracked.rect)
+                                    runOnUiThread {
+                                        frozenBox = tracked.copy(rotationDegrees = 0f)
+                                        frozenImageWidth = imageWidth
+                                        frozenImageHeight = imageHeight
+                                        if (!touchConfirmInProgress && !waitingForTouchConfirm) {
+                                            touchActive = false
+                                            touchFrameCount = 0
+                                            releaseFrameCount = 0
+                                            lastTouchTtsTimeMs = 0L
+                                        }
+                                    }
+                                }
+                            } else {
+                                val handRect = mergedHandRect(latestHandsResult.get(), imageWidth, imageHeight)
+                                val flow = opticalFlowTracker.update(rotatedBitmap, handRect, frozenBox?.rect)
+                                flow?.let { (dx, dy) ->
+                                    val b = frozenBox ?: return@let
+                                    val r = b.rect
+                                    val newRect = RectF(r.left + dx, r.top + dy, r.right + dx, r.bottom + dy)
+                                    gyroManager.correctPosition(newRect)
+                                    runOnUiThread { frozenBox = b.copy(rect = newRect) }
+                                }
+                            }
+                        } else {
+                            if (wasOccluded) frozenBox?.rect?.let { gyroManager.correctPosition(it) }
+                            if (shouldValidate) {
+                                val detections = runYOLOX(rotatedBitmap)
+                                inferMs = System.currentTimeMillis() - startTime
+                                val minConf = if (shouldReacquire) 0.18f else 0.22f
+                                val tracked = findTrackedTarget(detections, lockedTargetLabel, frozenBox, minConf)
+                                if (tracked != null) {
+                                    validationFailCount = 0
+                                    lastSuccessfulValidationTimeMs = System.currentTimeMillis()
+                                    val cur = frozenBox?.rect ?: tracked.rect
+                                    val blend = 0.7f
+                                    val blendedRect = RectF(
+                                        cur.left * blend + tracked.rect.left * (1f - blend),
+                                        cur.top * blend + tracked.rect.top * (1f - blend),
+                                        cur.right * blend + tracked.rect.right * (1f - blend),
+                                        cur.bottom * blend + tracked.rect.bottom * (1f - blend)
+                                    )
+                                    gyroManager.correctPosition(blendedRect)
+                                    runOnUiThread {
+                                        frozenBox = tracked.copy(rect = blendedRect, rotationDegrees = 0f)
+                                        frozenImageWidth = imageWidth
+                                        frozenImageHeight = imageHeight
+                                        if (!touchConfirmInProgress && !waitingForTouchConfirm) {
+                                            touchActive = false
+                                            touchFrameCount = 0
+                                            releaseFrameCount = 0
+                                            lastTouchTtsTimeMs = 0L
+                                        }
+                                    }
+                                } else {
+                                    validationFailCount++
+                                    if (validationFailCount >= VALIDATION_FAIL_LIMIT) {
+                                        validationFailCount = 0
+                                        runOnUiThread { gyroManager.resetToSearchingFromUI() }
+                                    }
+                                }
+                            }
+                        }
+                        wasOccluded = handsOverlap
+
+                        var distanceMm: Int? = null
+                        val frozen = frozenBox
+                        if (frozen != null) {
+                            val cx = (frozen.rect.left + frozen.rect.right) / 2f
+                            val cy = (frozen.rect.top + frozen.rect.bottom) / 2f
+                            distanceMm = getDepthAtCameraPixel(frame, cx.toInt(), cy.toInt(), imageWidth, imageHeight)
+                            processDistanceGuidanceByDepth(distanceMm)
+                        }
+                        val boxes = if (frozen != null) listOf(frozen) else emptyList()
+                        runOnUiThread {
+                            displayResults(boxes, inferMs, frozenImageWidth, frozenImageHeight)
+                        }
+                    }
+                }
+                drawPreviewAndUpdateFps(rotatedBitmap)
+            } catch (e: Exception) {
+                if (arRunning) Log.e(TAG, "AR 프레임 루프 오류", e)
+            }
+        }
+    }
+
+    /** 회전된 비트맵 좌표 → ARCore 카메라 이미지(IMAGE_PIXELS) 좌표. displayRotationDegrees 기준 */
+    private fun rotatedBitmapToCameraPixel(px: Int, py: Int, imageWidth: Int, imageHeight: Int): Pair<Int, Int> {
+        return when (displayRotationDegrees) {
+            0 -> Pair(px, py)
+            90 -> Pair(py, imageWidth - 1 - px)
+            180 -> Pair(imageWidth - 1 - px, imageHeight - 1 - py)
+            270 -> Pair(imageHeight - 1 - py, px)
+            else -> Pair(px, py)
+        }
+    }
+
+    /** 카메라 이미지 픽셀(회전된 비트맵 좌표)에서 Depth 이미지 좌표로 변환 후 mm 값 반환. 실패 시 null */
+    private fun getDepthAtCameraPixel(frame: Frame, centerX: Int, centerY: Int, imageWidth: Int, imageHeight: Int): Int? {
+        val (cameraPx, cameraPy) = rotatedBitmapToCameraPixel(centerX, centerY, imageWidth, imageHeight)
+        var depthImage: Image? = null
+        try {
+            depthImage = frame.acquireDepthImage16Bits()
+        } catch (_: NotYetAvailableException) {
+            return null
+        } catch (_: Exception) {
+            return null
+        }
+        try {
+            val (depthX, depthY) = cameraToDepthPixel(frame, cameraPx.toFloat(), cameraPy.toFloat(), depthImage!!)
+                ?: return null
+            if (depthX < 0 || depthY < 0 || depthX >= depthImage.width || depthY >= depthImage.height) return null
+            return getMillimetersDepth(depthImage, depthX, depthY)
+        } finally {
+            depthImage?.close()
+        }
+    }
+
+    /** ARCore: 카메라 이미지(IMAGE_PIXELS) 픽셀 → Depth 이미지 픽셀. 변환 실패 시 null */
+    private fun cameraToDepthPixel(frame: Frame, cameraPx: Float, cameraPy: Float, depthImage: Image): Pair<Int, Int>? {
+        val cpuCoords = floatArrayOf(cameraPx, cameraPy)
+        val textureCoords = FloatArray(2)
+        frame.transformCoordinates2d(
+            Coordinates2d.IMAGE_PIXELS,
+            cpuCoords,
+            Coordinates2d.TEXTURE_NORMALIZED,
+            textureCoords
+        )
+        if (textureCoords[0] < 0 || textureCoords[0] > 1 || textureCoords[1] < 0 || textureCoords[1] > 1) return null
+        val depthX = (textureCoords[0] * depthImage.width).toInt().coerceIn(0, depthImage.width - 1)
+        val depthY = (textureCoords[1] * depthImage.height).toInt().coerceIn(0, depthImage.height - 1)
+        return Pair(depthX, depthY)
+    }
+
+    /** Depth 이미지 (x,y) 픽셀의 거리(mm). 16비트 little-endian */
+    private fun getMillimetersDepth(depthImage: Image, x: Int, y: Int): Int {
+        val plane = depthImage.planes[0]
+        val byteIndex = x * plane.pixelStride + y * plane.rowStride
+        val buffer = plane.buffer.order(ByteOrder.nativeOrder())
+        val depthSample = buffer.getShort(byteIndex)
+        return depthSample.toInt() and 0xFFFF
+    }
+
+    private fun drawPreviewAndUpdateFps(bitmap: Bitmap) {
+        runOnUiThread {
+            val holder = (binding.previewView as? android.view.SurfaceView)?.holder ?: return@runOnUiThread
+            val canvas = holder.lockCanvas() ?: return@runOnUiThread
+            try {
+                val vw = canvas.width
+                val vh = canvas.height
+                val scale = min(vw.toFloat() / bitmap.width, vh.toFloat() / bitmap.height)
+                val dw = (bitmap.width * scale).toInt()
+                val dh = (bitmap.height * scale).toInt()
+                val left = (vw - dw) / 2
+                val top = (vh - dh) / 2
+                canvas.drawBitmap(bitmap, null, android.graphics.Rect(left, top, left + dw, top + dh), null)
+            } finally {
+                holder.unlockCanvasAndPost(canvas)
+            }
+            updateFPS()
+        }
+    }
+
     private var firstInferenceLogged = false
     private var firstResolutionLogged = false
-    private var lastTargetMatchDiagMs = 0L
-
-    // 이미지 분석기
-    private inner class ImageAnalyzer : ImageAnalysis.Analyzer {
-
-        override fun analyze(imageProxy: ImageProxy) {
-            val startTime = System.currentTimeMillis()
-
-            // Bitmap 변환 (YUV_420_888 → RGB)
-            var bitmap = imageProxy.toBitmap()
-            if (bitmap == null) {
-                imageProxy.close()
-                return
-            }
-            // 세로 모드에서 카메라 센서는 보통 가로 → 회전 정보 적용해 모델 입력이 화면과 맞도록 함
-            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-            if (rotationDegrees != 0) {
-                bitmap = BitmapUtils.rotateBitmap(bitmap, rotationDegrees) ?: bitmap
-            }
-
-            val w = bitmap.width
-            val h = bitmap.height
-            if (!firstResolutionLogged) {
-                Log.d("GrabIT_CamRes_Only", "이미지 분석 해상도: ${w} x ${h}")
-                firstResolutionLogged = true
-            }
-            val inferenceTime = System.currentTimeMillis() - startTime
-
-            // 손 인식: LOCKED일 때만 실행 (occlusion/optical flow용). SEARCHING에서는 파이프라인 비활성화
-            if (searchState == SearchState.LOCKED) {
-                sendFrameToHands(bitmap, imageProxy.imageInfo.timestamp)
-            }
-
-            when (searchState) {
-                SearchState.SEARCHING -> {
-                    if (!hasSpecificTarget()) {
-                        displayResults(emptyList(), inferenceTime, w, h)
-                    } else {
-                    val detections = runYOLOX(bitmap)
-                    processAutoZoom(detections, w, h)
-                    val matchResult = findTargetMatch(detections, getTargetLabel())
-                    if (matchResult != null) {
-                        val (matched, actualPrimaryLabel) = matchResult
-                        if (matched.confidence >= TARGET_CONFIDENCE_THRESHOLD) {
-                            // 같은 클래스가 연속 감지됐는지 확인 (잘못된 클래스 방지)
-                            val prev = pendingLockBox
-                            if (prev != null && prev.label == matched.label &&
-                                RectF.intersects(matched.rect, prev.rect)) {
-                                pendingLockCount++
-                                if (pendingLockCount >= LOCK_CONFIRM_FRAMES) {
-                                    pendingLockBox = null
-                                    pendingLockCount = 0
-                                    transitionToLocked(matched, w, h, actualPrimaryLabel)
-                                    frozenBox = matched
-                                frozenImageWidth = w
-                                frozenImageHeight = h
-                                wasOccluded = false
-                                opticalFlowTracker.reset()
-                                gyroManager.startTracking(matched.rect, w, h)
-                                lockedFrameCount = 0
-                                validationFailCount = 0
-                                    updateFPS()
-                                    imageProxy.close()
-                                    return
-                                }
-                            } else {
-                                pendingLockBox = matched
-                                pendingLockCount = 1
-                            }
-                        }
-                    } else {
-                        pendingLockBox = null
-                        pendingLockCount = 0
-                    }
-                    displayResults(filterDetectionsByTarget(detections, getTargetLabel()), inferenceTime, w, h)
-                    }
-                }
-                SearchState.LOCKED -> {
-                    lockedFrameCount++
-                    val nowMs = System.currentTimeMillis()
-                    val boxLostDurationMs = nowMs - lastSuccessfulValidationTimeMs
-                    val shouldReacquire = boxLostDurationMs >= REACQUIRE_INFERENCE_AFTER_MS
-                    val shouldValidate = shouldReacquire || (lockedFrameCount % VALIDATION_INTERVAL) == 0
-                    var inferMs = System.currentTimeMillis() - startTime
-
-                    val handsOverlap = frozenBox?.let { box ->
-                        isHandOverlappingBox(latestHandsResult.get(), box.rect, w, h)
-                    } ?: false
-
-                    // near-contact(touch) 판정: 엄지·검지 중간점이 확장 박스 안에 있으면 true
-                    val handTouch = frozenBox?.let { box ->
-                        isHandTouchingTargetBox(latestHandsResult.get(), box.rect, w, h)
-                    } ?: false
-
-                    // 상태머신: 연속 프레임 확인 + 해제 홀드 + 쿨다운
-                    if (handTouch) {
-                        touchFrameCount++
-                        releaseFrameCount = 0
-                        if (!touchActive && !touchConfirmInProgress && !touchConfirmScheduled && touchFrameCount >= TOUCH_CONFIRM_FRAMES) {
-                            touchActive = true
-                            val nowMs = System.currentTimeMillis()
-                            val cooldownOk = nowMs - lastTouchTtsTimeMs >= TOUCH_TTS_COOLDOWN_MS
-                            if (cooldownOk) {
-                                lastTouchTtsTimeMs = nowMs
-                                touchConfirmScheduled = true
-                                runOnUiThread {
-                                    stopPositionAnnounce()
-                                    stopHandGuidanceTTS()
-                                    enterTouchConfirm()
-                                }
-                            }
-                        }
-                    } else {
-                        releaseFrameCount++
-                        if (releaseFrameCount >= RELEASE_HOLD_FRAMES) {
-                            touchActive = false
-                            touchFrameCount = 0
-                        } else {
-                            touchFrameCount = 0
-                        }
-                    }
-
-                    gyroManager.suspendUpdates = handsOverlap
-
-                    if (handsOverlap) {
-                        if (shouldReacquire) {
-                            val detections = runYOLOX(bitmap)
-                            inferMs = System.currentTimeMillis() - startTime
-                            val minConf = 0.18f
-                            val tracked = findTrackedTarget(detections, lockedTargetLabel, frozenBox, minConf)
-                            if (tracked != null) {
-                                lastSuccessfulValidationTimeMs = System.currentTimeMillis()
-                                gyroManager.correctPosition(tracked.rect)
-                                frozenBox = tracked.copy(rotationDegrees = 0f)
-                                frozenImageWidth = w
-                                frozenImageHeight = h
-                                // 터치 확인 대기 중이 아닐 때만 터치 플로우 리셋 (대기 중 리셋하면 "상품에 닿았나요?" 반복 발화 방지)
-                                if (!touchConfirmInProgress && !waitingForTouchConfirm) {
-                                    touchActive = false
-                                    touchFrameCount = 0
-                                    releaseFrameCount = 0
-                                    lastTouchTtsTimeMs = 0L
-                                }
-                            }
-                        } else {
-                            val handRect = mergedHandRect(latestHandsResult.get(), w, h)
-                            val flow = opticalFlowTracker.update(bitmap, handRect, frozenBox?.rect)
-                            flow?.let { (dx, dy) ->
-                                val box = frozenBox ?: return@let
-                                val r = box.rect
-                                val newRect = RectF(r.left + dx, r.top + dy, r.right + dx, r.bottom + dy)
-                                gyroManager.correctPosition(newRect)
-                                frozenBox = box.copy(rect = newRect)
-                            }
-                        }
-                    } else {
-                        // occlusion 해제 → gyro 기저 동기화
-                        if (wasOccluded) {
-                            frozenBox?.rect?.let { gyroManager.correctPosition(it) }
-                        }
-                        if (shouldValidate) {
-                            val detections = runYOLOX(bitmap)
-                            inferMs = System.currentTimeMillis() - startTime
-                            val minConf = if (shouldReacquire) 0.18f else 0.22f
-                            val tracked = findTrackedTarget(detections, lockedTargetLabel, frozenBox, minConf)
-                            if (tracked != null) {
-                                validationFailCount = 0
-                                // 한 프레임 점프 방지: 현재 박스 70% + YOLOX 30% 블렌딩
-                                lastSuccessfulValidationTimeMs = System.currentTimeMillis()
-                                val cur = frozenBox?.rect ?: tracked.rect
-                                val blend = 0.7f
-                                val blendedRect = RectF(
-                                    cur.left * blend + tracked.rect.left * (1f - blend),
-                                    cur.top * blend + tracked.rect.top * (1f - blend),
-                                    cur.right * blend + tracked.rect.right * (1f - blend),
-                                    cur.bottom * blend + tracked.rect.bottom * (1f - blend)
-                                )
-                                gyroManager.correctPosition(blendedRect)
-                                frozenBox = tracked.copy(rect = blendedRect, rotationDegrees = 0f)
-                                frozenImageWidth = w
-                                frozenImageHeight = h
-                                // 터치 확인 대기 중이 아닐 때만 터치 플로우 리셋 (대기 중 리셋 시 질문 반복 방지)
-                                if (!touchConfirmInProgress && !waitingForTouchConfirm) {
-                                    touchActive = false
-                                    touchFrameCount = 0
-                                    releaseFrameCount = 0
-                                    lastTouchTtsTimeMs = 0L
-                                }
-                            } else {
-                                validationFailCount++
-                                if (validationFailCount >= VALIDATION_FAIL_LIMIT) {
-                                    validationFailCount = 0
-                                    gyroManager.resetToSearchingFromUI()
-                                }
-                            }
-                        }
-                    }
-                    wasOccluded = handsOverlap
-
-                    val box = frozenBox
-                    if (box != null && frozenImageWidth > 0 && frozenImageHeight > 0) {
-                        processDistanceGuidance(box, frozenImageWidth, frozenImageHeight)
-                    }
-                    val boxes = if (box != null) listOf(box) else emptyList()
-                    displayResults(boxes, inferMs, frozenImageWidth, frozenImageHeight)
-                }
-            }
-
-            updateFPS()
-            imageProxy.close()
-        }
-
-        @androidx.camera.core.ExperimentalGetImage
-        private fun ImageProxy.toBitmap(): Bitmap? {
-            val image = this.image ?: return null
-            // YUV_420_888 → Bitmap 변환 (간단 버전)
-            // 실제로는 더 최적화된 변환 필요
-            return BitmapUtils.yuv420ToBitmap(image)
-        }
-    }
 
     /** 화면이 거의 안 보일 정도로 어두우면 true (손으로 가림 등). threshold 낮을수록 어두운 이미지도 처리 */
     private fun isImageTooDark(bitmap: Bitmap, threshold: Int = 28): Boolean {
@@ -2094,7 +2133,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         cancelSearchTimeout()
         stopPositionAnnounce()
-        cameraExecutor.shutdown()
+        arExecutor.shutdown()
         yoloxInterpreter?.close()
         gpuDelegate?.close()
         gyroManager.stopTracking()
@@ -2105,8 +2144,18 @@ class MainActivity : AppCompatActivity() {
         if (::gyroManager.isInitialized) gyroManager.stopTracking()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (arSession != null) {
+            arSession?.resume()
+        } else if (screenState == ScreenState.CAMERA_SCREEN) {
+            startArSession()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
+        arSession?.pause()
         ttsManager?.stop()
         sttManager?.stopListening()
     }
@@ -2117,7 +2166,7 @@ class MainActivity : AppCompatActivity() {
         cancelSearchTimeout()
         stopPositionAnnounce()
         try {
-            stopCamera()
+            stopArSession()
         } catch (_: Exception) {}
         sttManager?.stopListening()
         ttsManager?.stop()
