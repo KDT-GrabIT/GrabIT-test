@@ -27,14 +27,18 @@ import com.google.ar.core.Config
 import com.google.ar.core.Coordinates2d
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
+import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.NotYetAvailableException
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.graphics.RectF
 import android.view.Surface
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.media.Image
-import java.nio.ByteOrder
+import android.opengl.GLES20
+import android.opengl.GLES11Ext
 import com.example.grabitTest.databinding.ActivityMainBinding
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -73,6 +77,7 @@ class MainActivity : AppCompatActivity() {
     private var arSession: Session? = null
     @Volatile private var arRunning = false
     private var displayRotationDegrees = 0
+    private lateinit var displayRotationHelper: DisplayRotationHelper
 
     // 자동 탐색 메시지 (ARCore에는 줌 없음; 거리 > 2000mm 시 "너무 멂" 안내)
     private val scanHandler = Handler(Looper.getMainLooper())
@@ -251,6 +256,8 @@ class MainActivity : AppCompatActivity() {
         binding.retryBtn.setOnClickListener { voiceFlowController?.onRetrySearch() }
         binding.adminTextInputBtn.setOnClickListener { showAdminTextInputDialog() }
         setupPinchZoom()
+        displayRotationHelper = DisplayRotationHelper(this)
+        setupPreviewSurface()
 
         if (allPermissionsGranted()) {
             showFirstScreen()
@@ -734,6 +741,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupPinchZoom() {
         // ARCore 세션에서는 카메라 줌 제어 없음 (무시)
+    }
+
+    /** SurfaceView 생명주기: surfaceCreated 시 세션 시작, surfaceChanged 시 display geometry 갱신, surfaceDestroyed 시 세션 종료 */
+    private fun setupPreviewSurface() {
+        val view = binding.previewView as? SurfaceView ?: run {
+            Log.e(TAG, "setupPreviewSurface: previewView is not SurfaceView")
+            return
+        }
+        view.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                Log.d(TAG, "surfaceCreated: holder=${holder}, surface.isValid=${holder.surface.isValid}, screenState=$screenState, arSession==null=${arSession == null}")
+                if (screenState == ScreenState.CAMERA_SCREEN && arSession == null) {
+                    startArSession()
+                }
+            }
+
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                Log.d(TAG, "surfaceChanged: holder=${holder}, surface.isValid=${holder.surface.isValid}, width=$width, height=$height")
+                displayRotationHelper.onSurfaceChanged(width, height)
+            }
+
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                Log.d(TAG, "surfaceDestroyed: holder=$holder")
+                stopArSession()
+            }
+        })
     }
 
     private var scanRunnable: Runnable? = null
@@ -1272,10 +1305,35 @@ class MainActivity : AppCompatActivity() {
         return buffer
     }
 
-    /** ARCore 세션 시작: Session 생성, Config(Depth AUTOMATIC), 프레임 루프 시작 */
+    /** ARCore용 카메라 텍스처 생성 (GL_TEXTURE_EXTERNAL_OES). GL 컨텍스트 필요 시 실패할 수 있음. */
+    private fun createTexture(): Int {
+        val textures = IntArray(1)
+        GLES20.glGenTextures(1, textures, 0)
+        val textureId = textures[0]
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
+        GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST.toFloat())
+        GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST.toFloat())
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+        return textureId
+    }
+
+    /** ARCore 세션 시작: Session 생성, Config(Depth AUTOMATIC), display geometry 설정 후 프레임 루프 시작 */
     private fun startArSession() {
-        if (arSession != null) return
+        Log.d(TAG, "startArSession: 진입, arSession==null=${arSession == null}, screenState=$screenState")
+        if (arSession != null) {
+            Log.d(TAG, "startArSession: 이미 세션 있음, 스킵")
+            return
+        }
+        if (!allPermissionsGranted()) {
+            Log.e(TAG, "startArSession: 권한 미획득, 세션 시작 불가")
+            runOnUiThread {
+                binding.systemMessageText.text = "카메라 권한이 필요합니다."
+            }
+            return
+        }
         try {
+            Log.d(TAG, "startArSession: Session 생성 시도")
             val session = Session(this)
             val config = session.config
             config.depthMode = Config.DepthMode.AUTOMATIC
@@ -1284,15 +1342,38 @@ class MainActivity : AppCompatActivity() {
                 Log.w(TAG, "Depth API 미지원 기기")
             }
             session.configure(config)
+
+            // ARCore 내부 동작을 위해 카메라 텍스처 ID 등록 (없으면 session.update()에서 블로킹될 수 있음)
+            val textureId = try {
+                createTexture()
+            } catch (e: Exception) {
+                Log.w(TAG, "createTexture 실패, placeholder 사용", e)
+                12345
+            }
+            session.setCameraTextureName(textureId)
+            Log.d(AR_DEBUG, "setCameraTextureName($textureId) 완료")
+
             arSession = session
             arRunning = true
+            Log.d(TAG, "startArSession: 세션 생성·설정 성공, 프레임 루프 post 예약")
             scanHandler.postDelayed({ startScanning() }, SCAN_INITIAL_DELAY_MS)
             binding.previewView.post {
-                updateDisplayGeometry()
+                if (arSession == null) {
+                    Log.e(TAG, "startArSession post: arSession이 이미 null (surfaceDestroyed 등), 루프 시작 스킵")
+                    return@post
+                }
+                val s = arSession ?: return@post
+                val w = binding.previewView.width
+                val h = binding.previewView.height
+                Log.d(TAG, "startArSession post: view size=$w x $h, updateSessionIfNeeded 후 루프 시작")
+                displayRotationHelper.onSurfaceChanged(w, h)
+                displayRotationHelper.updateSessionIfNeeded(s)
                 arExecutor.execute(arFrameLoopRunnable)
             }
         } catch (e: Exception) {
             Log.e(TAG, "ARCore 세션 시작 실패", e)
+            arSession = null
+            arRunning = false
             runOnUiThread {
                 binding.systemMessageText.text = "ARCore 초기화 실패"
                 binding.statusText.text = "ARCore 초기화 실패"
@@ -1300,47 +1381,63 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateDisplayGeometry() {
-        val session = arSession ?: return
-        val view = binding.previewView
-        if (view.width == 0 || view.height == 0) return
-        val rotation = windowManager.defaultDisplay?.rotation ?: Surface.ROTATION_0
-        displayRotationDegrees = when (rotation) {
-            Surface.ROTATION_0 -> 0
-            Surface.ROTATION_90 -> 90
-            Surface.ROTATION_180 -> 180
-            Surface.ROTATION_270 -> 270
-            else -> 0
-        }
-        session.setDisplayGeometry(rotation, view.width, view.height)
-    }
-
     private val arFrameLoopRunnable = Runnable {
+        Log.d(AR_DEBUG, "arFrameLoopRunnable: 스레드 진입, arRunning=$arRunning, arSession==null=${arSession == null}")
         while (arRunning) {
-            val session = arSession ?: break
+            val session = arSession
+            if (session == null) {
+                Log.w(AR_DEBUG, "Loop: arSession==null, break")
+                break
+            }
             try {
-                val frame = session.update() ?: continue
-                if (binding.previewView.width == 0 || binding.previewView.height == 0) {
-                    runOnUiThread { updateDisplayGeometry() }
+                Log.v(AR_DEBUG, "Loop ticking...")
+                displayRotationHelper.updateSessionIfNeeded(session)
+                displayRotationDegrees = displayRotationHelper.getRotationDegrees()
+
+                Log.v(AR_DEBUG, "Session update 직전")
+                val frame = session.update()
+                Log.v(AR_DEBUG, "Session update 직후: frame=${frame != null}")
+                if (frame == null) continue
+
+                val view = binding.previewView
+                if (view.width == 0 || view.height == 0) {
+                    Log.v(AR_DEBUG, "view size 0: ${view.width}x${view.height}, skip")
                     continue
                 }
+
                 var cameraImage: Image? = null
                 try {
                     cameraImage = frame.acquireCameraImage()
-                } catch (_: NotYetAvailableException) {
+                    Log.v(AR_DEBUG, "Image Acquire: ${if (cameraImage != null) "ok" else "null"}")
+                } catch (e: NotYetAvailableException) {
+                    Log.v(AR_DEBUG, "acquireCameraImage: NotYetAvailable")
                     continue
                 } catch (e: Exception) {
                     Log.e(TAG, "acquireCameraImage 실패", e)
                     continue
                 }
-                val bitmap = BitmapUtils.yuv420ToBitmap(cameraImage!!)
+                if (cameraImage == null) continue
+                val bitmap = BitmapUtils.yuv420ToBitmap(cameraImage)
                 cameraImage.close()
                 cameraImage = null
+                Log.v(AR_DEBUG, "Bitmap Convert: ${if (bitmap != null) "ok ${bitmap.width}x${bitmap.height}" else "null"}")
                 if (bitmap == null) continue
-                val w = bitmap.width
-                val h = bitmap.height
+
                 val rotatedBitmap = BitmapUtils.rotateBitmap(bitmap, displayRotationDegrees) ?: bitmap
                 if (rotatedBitmap != bitmap) bitmap.recycle()
+
+                // 매 프레임 무조건 프리뷰 렌더링 (검은 화면 방지)
+                drawPreviewToSurface(rotatedBitmap, view)
+
+                // 추론: isScanning일 때만 YOLOX + 오버레이
+                if (!isScanning) {
+                    runOnUiThread {
+                        binding.overlayView.setDetections(emptyList(), 0, 0)
+                        updateFPS()
+                    }
+                    continue
+                }
+
                 val imageWidth = rotatedBitmap.width
                 val imageHeight = rotatedBitmap.height
                 val startTime = System.currentTimeMillis()
@@ -1380,7 +1477,7 @@ class MainActivity : AppCompatActivity() {
                                             }
                                             displayResults(filterDetectionsByTarget(detections, getTargetLabel()),
                                                 System.currentTimeMillis() - startTime, imageWidth, imageHeight)
-                                            drawPreviewAndUpdateFps(rotatedBitmap)
+                                            runOnUiThread { updateFPS() }
                                             continue
                                         }
                                     } else {
@@ -1520,10 +1617,51 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                drawPreviewAndUpdateFps(rotatedBitmap)
+                runOnUiThread { updateFPS() }
             } catch (e: Exception) {
                 if (arRunning) Log.e(TAG, "AR 프레임 루프 오류", e)
             }
+        }
+    }
+
+    /** 매 프레임 비트맵을 SurfaceView 캔버스에 Scale 맞춰 그려 검은 화면 방지 */
+    private fun drawPreviewToSurface(bitmap: Bitmap, view: View) {
+        val surfaceView = view as? SurfaceView ?: run {
+            Log.w(AR_DEBUG, "drawPreviewToSurface: view is not SurfaceView")
+            return
+        }
+        val holder = surfaceView.holder ?: run {
+            Log.w(AR_DEBUG, "drawPreviewToSurface: holder==null")
+            return
+        }
+        if (!holder.surface.isValid) {
+            Log.w(AR_DEBUG, "drawPreviewToSurface: surface.isValid==false")
+            return
+        }
+        val canvas = holder.lockCanvas()
+        if (canvas == null) {
+            Log.w(AR_DEBUG, "drawPreviewToSurface: lockCanvas() returned null")
+            return
+        }
+        try {
+            val vw = canvas.width
+            val vh = canvas.height
+            val bw = bitmap.width
+            val bh = bitmap.height
+            if (vw <= 0 || vh <= 0 || bw <= 0 || bh <= 0) {
+                Log.v(AR_DEBUG, "drawPreviewToSurface: invalid size v=$vw x $vh b=$bw x $bh")
+                return
+            }
+            val scale = min(vw.toFloat() / bw, vh.toFloat() / bh)
+            val dw = (bw * scale).toInt()
+            val dh = (bh * scale).toInt()
+            val left = (vw - dw) / 2
+            val top = (vh - dh) / 2
+            val destRect = android.graphics.Rect(left, top, left + dw, top + dh)
+            canvas.drawBitmap(bitmap, null, destRect, null)
+            Log.v(AR_DEBUG, "Draw: drawBitmap done $bw x $bh -> $vw x $vh")
+        } finally {
+            holder.unlockCanvasAndPost(canvas)
         }
     }
 
@@ -2146,15 +2284,33 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (arSession != null) {
-            arSession?.resume()
-        } else if (screenState == ScreenState.CAMERA_SCREEN) {
-            startArSession()
+        Log.d(TAG, "onResume: 권한=${allPermissionsGranted()}, arSession==null=${arSession == null}, screenState=$screenState")
+        if (!allPermissionsGranted()) {
+            Log.w(TAG, "onResume: 카메라 권한 없음, AR 세션 처리 스킵")
+            return
         }
+        if (arSession == null) {
+            if (screenState == ScreenState.CAMERA_SCREEN) {
+                Log.d(TAG, "onResume: arSession null, startArSession() 시도")
+                startArSession()
+            }
+        } else {
+            try {
+                arSession!!.resume()
+                Log.d(AR_DEBUG, "Session Resumed Successfully")
+            } catch (e: CameraNotAvailableException) {
+                Log.e(TAG, "onResume: CameraNotAvailableException", e)
+                arSession = null
+            } catch (e: Exception) {
+                Log.e(TAG, "onResume: session.resume() 실패", e)
+            }
+        }
+        displayRotationHelper.onResume()
     }
 
     override fun onPause() {
         super.onPause()
+        displayRotationHelper.onPause()
         arSession?.pause()
         ttsManager?.stop()
         sttManager?.stopListening()
@@ -2174,6 +2330,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "GrabIT_Test"
+        private const val AR_DEBUG = "AR_DEBUG"
         private var yoloxShapeLogged = false
         private const val THUMB_TIP = 4
         private const val INDEX_TIP = 8
