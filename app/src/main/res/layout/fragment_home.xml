@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/ivory_background">
+
+    <!-- 카메라 + 오버레이 (가중치 1로 남은 공간 차지, 버튼 숨기면 확장) -->
+    <FrameLayout
+        android:id="@+id/cameraContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.camera.view.PreviewView
+            android:id="@+id/previewView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.example.grabitTest.OverlayView
+            android:id="@+id/overlayView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+    <!-- 음성 입력 버튼 영역: 탐지 모드/듣는 중이면 GONE → 카메라 확장 -->
+    <FrameLayout
+        android:id="@+id/voiceButtonArea"
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:background="@color/ivory_panel"
+        android:padding="16dp">
+
+        <Button
+            android:id="@+id/voiceInputButton"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="음성 입력"
+            android:textSize="18sp"
+            android:drawableStart="@android:drawable/ic_btn_speak_now"
+            android:drawablePadding="8dp"
+            android:gravity="center" />
+    </FrameLayout>
+
+    <!-- 시스템/사용자 메시지 패널 -->
+    <LinearLayout
+        android:id="@+id/messageOverlayBottom"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_message_panel"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/searchTargetLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_message_card"
+            android:padding="8dp"
+            android:text="찾는 품목: —"
+            android:textColor="@color/accent_warm"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="시스템 메시지"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/systemMessageText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:minHeight="40dp"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_message_card"
+            android:padding="8dp"
+            android:text=""
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:maxLines="3"
+            android:ellipsize="end" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="내가 말한 메시지"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/userSpeechText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:minHeight="40dp"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_message_card"
+            android:padding="8dp"
+            android:text=""
+            android:textColor="@color/accent_warm"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- 음성 플로우 버튼 (확인/재입력/다시 찾기) - 필요 시 표시 -->
+    <LinearLayout
+        android:id="@+id/voiceFlowButtons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:visibility="gone"
+        android:background="@color/ivory_panel"
+        android:padding="8dp">
+
+        <Button
+            android:id="@+id/confirmBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="확인"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/reinputBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="재입력"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/retryBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="다시 찾기"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>
