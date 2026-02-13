@@ -37,7 +37,9 @@ class VoiceFlowController(
 
         const val MSG_CAMERA_ON = "카메라가 켜졌습니다."
 
-        fun msgSearchResult(productName: String) = "${productName}를 찾았습니다."
+        fun msgSearchResult(productName: String, confidencePercent: Int? = null) =
+            if (confidencePercent != null) "${productName}를 ${confidencePercent}% 확률로 찾았습니다."
+            else "${productName}를 찾았습니다."
 
         const val MSG_SEARCH_FAILED =
             "상품을 찾지 못했습니다. 다시 찾으시겠습니까?"
@@ -199,7 +201,8 @@ class VoiceFlowController(
         detectedClass: String? = null,
         boxRect: RectF? = null,
         imageWidth: Int = 0,
-        imageHeight: Int = 0
+        imageHeight: Int = 0,
+        confidencePercent: Int? = null
     ) {
         if (success) {
             transitionTo(VoiceFlowState.SEARCH_RESULT)
@@ -207,7 +210,7 @@ class VoiceFlowController(
                 ProductDictionary.getDisplayNameKo(detectedClass)
             else
                 currentProductName
-            val baseMsg = msgSearchResult(displayName)
+            val baseMsg = msgSearchResult(displayName, confidencePercent)
             val guidance = if (boxRect != null && imageWidth > 0 && imageHeight > 0) {
                 buildPositionGuidance(boxRect, imageWidth, imageHeight)
             } else null

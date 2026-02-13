@@ -1240,7 +1240,7 @@ class HomeFragment : Fragment() {
                 val isRequestedProduct = requested.isNullOrBlank() || requested == actualLabel
                 if (isRequestedProduct) {
                     voiceSearchTargetLabel = null
-                    voiceFlowController?.onSearchComplete(true, actualLabel, box.rect, imageWidth, imageHeight)
+                    voiceFlowController?.onSearchComplete(true, actualLabel, box.rect, imageWidth, imageHeight, percent)
                 }
             }
             startPositionAnnounce()
