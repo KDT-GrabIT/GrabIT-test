@@ -104,16 +104,27 @@ class HomeFragment : Fragment() {
     private val TARGET_CONFIDENCE_THRESHOLD = 0.5f
     private val currentTargetLabel = AtomicReference<String>("")
 
-    private var lastGuidanceTime = 0L
+    private var lastDirectionGuidanceTime = 0L
+    private var lastDistanceGuidanceTime = 0L
+    private var lastActionGuidanceTime = 0L
+    private val DIRECTION_GUIDANCE_COOLDOWN_MS = 4000L   // 왼쪽/오른쪽 (4초)
+    private val DISTANCE_GUIDANCE_COOLDOWN_MS = 7000L    // "앞으로 오세요" (7초)
+    private val ACTION_GUIDANCE_COOLDOWN_MS = 10000L    // "손을 뻗어 확인해보세요" (10초)
+    private val SAFE_ZONE_LEFT = 0.3f   // centerXNorm < 0.3 → Left Zone
+    private val SAFE_ZONE_RIGHT = 0.7f  // centerXNorm > 0.7 → Right Zone (Safe: 0.3..0.7)
     private var lastZoomDecayTime = 0L
-    private val TARGET_BOX_RATIO = 0.2f
-    private val GUIDANCE_COOLDOWN_MS = 3000L
+    private val TARGET_BOX_RATIO = 0.12f  // 폴백: 거리 계산 실패 시 사용
+    private val CLOSE_DISTANCE_STABILITY_FRAMES = 15    // 500mm 이하 연속 15프레임(~0.5초) 시에만 "손을 뻗어" 허용
+    private var closeDistanceFrameCount = 0
     private val ZOOM_DECAY_INTERVAL_MS = 80L
-    private val BOX_RATIO_ZOOM_OUT = 0.3f
-    private val BOX_RATIO_ZOOM_IN = 0.1f
-    private val MAX_ZOOM_SCAN = 3.0f
-    private val ZOOM_LERP_SPEED_OUT = 0.35f
+    private val FOCAL_LENGTH_FACTOR = 1.1f   // pinhole: FocalLength = imageHeight * this
+    private val DISTANCE_NEAR_MM = 500f       // 50cm 이하 → "손을 뻗어 확인해보세요"
+    private val DISTANCE_ZOOM_OUT_MM = 700f   // 700mm 미만 → 1.0x 빠르게 복귀
+    private val DISTANCE_ZOOM_IN_MM = 1500f    // 1500mm 이상 → 줌 인
+    private val MAX_ZOOM_SCAN = 2.5f           // 거리 기반 줌 최대 2.5x
+    private val ZOOM_LERP_SPEED_OUT = 0.5f
     private val ZOOM_LERP_SPEED_IN = 0.04f
+    private val ZOOM_LERP_SPEED_OUT_FAST = 0.7f  // 700mm 미만 시 더 빠른 복귀
 
     private var sttManager: STTManager? = null
     private var ttsManager: TTSManager? = null
@@ -279,7 +290,9 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private fun speak(text: String, onDone: (() -> Unit)? = null) {
+    /** @param urgent true면 TTS 재생 중이어도 즉시 송출. false면 재생 중이면 무시(Drop). onDone은 마지막에 두어 trailing lambda 사용 가능. */
+    private fun speak(text: String, urgent: Boolean = true, onDone: (() -> Unit)? = null) {
+        if (!urgent && (ttsManager?.isSpeaking() == true)) return
         ttsManager?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, onDone)
     }
 
@@ -318,6 +331,10 @@ class HomeFragment : Fragment() {
         pendingLockBox = null
         pendingLockCount = 0
         validationFailCount = 0
+        closeDistanceFrameCount = 0
+        lastDirectionGuidanceTime = 0L
+        lastDistanceGuidanceTime = 0L
+        lastActionGuidanceTime = 0L
         lockedTargetLabel = ""
         frozenBox = null
         latestHandsResult.set(null)
@@ -595,10 +612,30 @@ class HomeFragment : Fragment() {
         val t = text.trim().lowercase().replace(" ", "")
         val isYes = t.contains("예") || t.contains("네") || t.contains("내") || t.contains("응") ||
             t.contains("맞") || t.contains("그래") || t.contains("좋아") || t == "yes" || t == "y"
-        if (isYes) {
-            speak(VoicePrompts.PROMPT_DONE) { resetToIdleFromTouch() }
-        } else {
-            speak(VoicePrompts.PROMPT_TOUCH_RESTART) { resetToIdleFromTouch() }
+        val isExplicitNo = t.contains("아니") || t.contains("아직") || t.contains("없어") || t == "no" || t == "n"
+        when {
+            isYes -> speak(VoicePrompts.PROMPT_DONE) { resetToIdleFromTouch() }
+            isExplicitNo -> resetTouchConfirmAndRetrack()
+            else -> speak(VoicePrompts.PROMPT_TOUCH_RESTART) { resetToIdleFromTouch() }
+        }
+    }
+
+    /** '손 닿았나요?'에 부정 답변 시: TOUCH_CONFIRM 해제, 재추적로 돌아감 */
+    private fun resetTouchConfirmAndRetrack() {
+        requireActivity().runOnUiThread {
+            sttManager?.cancelListening()
+            touchConfirmInProgress = false
+            touchConfirmScheduled = false
+            waitingForTouchConfirm = false
+            touchActive = false
+            touchFrameCount = 0
+            releaseFrameCount = 0
+            speak("다시 위치를 확인합니다.") {
+                requireActivity().runOnUiThread {
+                    startPositionAnnounce()
+                    binding.systemMessageText.text = "손을 뻗어 잡아주세요"
+                }
+            }
         }
     }
 
@@ -783,6 +820,26 @@ class HomeFragment : Fragment() {
         scanRunnable = null
     }
 
+    /** Pinhole: Distance_mm = (FocalLength_px * RealObjectWidth_mm) / BoundingBoxWidth_px, FocalLength = imageHeight * 1.1 */
+    private fun computeDistanceMm(boxWidthPx: Float, imageHeight: Int, label: String): Float {
+        if (boxWidthPx <= 0f || imageHeight <= 0) return Float.MAX_VALUE
+        val focalLengthPx = imageHeight * FOCAL_LENGTH_FACTOR
+        val physicalWidthMm = ProductDictionary.getPhysicalWidthMm(label)
+        return (focalLengthPx * physicalWidthMm) / boxWidthPx
+    }
+
+    /** 화면 구역: Left < 0.3, Right > 0.7, Safe 0.3..0.7 (centerXNorm = centerX / imageWidth) */
+    private fun isInSafeZone(centerXNorm: Float): Boolean =
+        centerXNorm in SAFE_ZONE_LEFT..SAFE_ZONE_RIGHT
+
+    private fun setZoomTo1x() {
+        val cam = camera ?: return
+        if (kotlin.math.abs(currentZoomRatio - 1.0f) >= 0.01f) {
+            currentZoomRatio = 1.0f
+            try { cam.cameraControl.setZoomRatio(1.0f) } catch (_: Exception) {}
+        }
+    }
+
     private fun processAutoZoom(detections: List<OverlayView.DetectionBox>, imageWidth: Int, imageHeight: Int) {
         val target = getTargetLabel().trim()
         if (target.isBlank()) return
@@ -790,45 +847,105 @@ class HomeFragment : Fragment() {
             (d.label.equals(target, true) || d.topLabels.any { it.first.equals(target, true) }) &&
                 d.confidence >= TARGET_CONFIDENCE_THRESHOLD
         }.maxByOrNull { it.confidence } ?: return
-        val totalArea = imageWidth * imageHeight
-        if (totalArea <= 0) return
-        val boxArea = match.rect.width() * match.rect.height()
-        val boxRatio = boxArea / totalArea
-        val cam = camera ?: return
-        val shouldZoomOut = boxRatio >= BOX_RATIO_ZOOM_OUT
-        val shouldZoomIn = boxRatio < BOX_RATIO_ZOOM_IN
-        if (!shouldZoomOut && !shouldZoomIn) return
-        requireActivity().runOnUiThread {
-            if (shouldZoomOut) stopScanning()
-            val newZoom = when {
-                shouldZoomOut -> (currentZoomRatio + (1.0f - currentZoomRatio) * ZOOM_LERP_SPEED_OUT)
-                    .coerceIn(1.0f, MAX_ZOOM_SCAN)
-                else -> min(MAX_ZOOM_SCAN, currentZoomRatio + ZOOM_LERP_SPEED_IN)
+        val boxCenterX = (match.rect.left + match.rect.right) / 2f
+        val centerXNorm = if (imageWidth > 0) boxCenterX / imageWidth else 0.5f
+        if (!isInSafeZone(centerXNorm)) {
+            requireActivity().runOnUiThread {
+                setZoomTo1x()
             }
-            if (kotlin.math.abs(newZoom - currentZoomRatio) >= 0.01f) {
-                currentZoomRatio = newZoom
-                try { cam.cameraControl.setZoomRatio(newZoom) } catch (_: Exception) {}
+            return
+        }
+        val boxWidthPx = match.rect.width()
+        val distanceMm = computeDistanceMm(boxWidthPx, imageHeight, match.label)
+        val cam = camera ?: return
+        val shouldZoomOutFast = distanceMm < DISTANCE_ZOOM_OUT_MM
+        val shouldZoomOutSlow = distanceMm in DISTANCE_ZOOM_OUT_MM..DISTANCE_ZOOM_IN_MM
+        val shouldZoomIn = distanceMm >= DISTANCE_ZOOM_IN_MM
+        val now = System.currentTimeMillis()
+        requireActivity().runOnUiThread {
+            when {
+                shouldZoomOutFast -> {
+                    stopScanning()
+                    val speed = ZOOM_LERP_SPEED_OUT_FAST
+                    val newZoom = (currentZoomRatio + (1.0f - currentZoomRatio) * speed).coerceIn(1.0f, MAX_ZOOM_SCAN)
+                    if (kotlin.math.abs(newZoom - currentZoomRatio) >= 0.01f) {
+                        currentZoomRatio = newZoom
+                        try { cam.cameraControl.setZoomRatio(newZoom) } catch (_: Exception) {}
+                    }
+                }
+                shouldZoomOutSlow && currentZoomRatio > 1.0f -> {
+                    val newZoom = (currentZoomRatio + (1.0f - currentZoomRatio) * ZOOM_LERP_SPEED_OUT)
+                        .coerceIn(1.0f, MAX_ZOOM_SCAN)
+                    if (kotlin.math.abs(newZoom - currentZoomRatio) >= 0.01f) {
+                        currentZoomRatio = newZoom
+                        try { cam.cameraControl.setZoomRatio(newZoom) } catch (_: Exception) {}
+                    }
+                }
+                shouldZoomIn -> {
+                    val newZoom = min(MAX_ZOOM_SCAN, currentZoomRatio + ZOOM_LERP_SPEED_IN)
+                    if (kotlin.math.abs(newZoom - currentZoomRatio) >= 0.01f) {
+                        currentZoomRatio = newZoom
+                        try { cam.cameraControl.setZoomRatio(newZoom) } catch (_: Exception) {}
+                    }
+                }
             }
         }
     }
 
+    /** 방향 정렬 우선: Left/Right Zone에서는 접근 안내·줌 금지. Safe Zone에서만 거리 안내. 쿨다운·안정화 적용. */
     private fun processDistanceGuidance(box: OverlayView.DetectionBox, imageWidth: Int, imageHeight: Int) {
         val cam = camera ?: return
         val totalArea = imageWidth * imageHeight
-        if (totalArea <= 0) return
-        val boxRatio = (box.rect.width() * box.rect.height()) / totalArea
-        val zoom = currentZoomRatio
+        if (totalArea <= 0 || imageWidth <= 0) return
+        val boxCenterX = (box.rect.left + box.rect.right) / 2f
+        val centerXNorm = boxCenterX / imageWidth
+        val boxWidthPx = box.rect.width()
+        val distanceMm = computeDistanceMm(boxWidthPx, imageHeight, box.label)
         val now = System.currentTimeMillis()
         requireActivity().runOnUiThread {
-            val newZoom = max(1.0f, currentZoomRatio * 0.95f)
-            if (currentZoomRatio > 1.0f && now - lastZoomDecayTime >= ZOOM_DECAY_INTERVAL_MS) {
-                lastZoomDecayTime = now
-                cam.cameraControl.setZoomRatio(newZoom)
-                currentZoomRatio = newZoom
-            }
-            if (zoom <= 1.2f && boxRatio < TARGET_BOX_RATIO && now - lastGuidanceTime >= GUIDANCE_COOLDOWN_MS) {
-                lastGuidanceTime = now
-                speak("조금 더 앞으로 오세요")
+            when {
+                centerXNorm < SAFE_ZONE_LEFT -> {
+                    closeDistanceFrameCount = 0
+                    setZoomTo1x()
+                    if (now - lastDirectionGuidanceTime >= DIRECTION_GUIDANCE_COOLDOWN_MS) {
+                        lastDirectionGuidanceTime = now
+                        speak("왼쪽으로 조금 더 돌리세요", false)
+                    }
+                }
+                centerXNorm > SAFE_ZONE_RIGHT -> {
+                    closeDistanceFrameCount = 0
+                    setZoomTo1x()
+                    if (now - lastDirectionGuidanceTime >= DIRECTION_GUIDANCE_COOLDOWN_MS) {
+                        lastDirectionGuidanceTime = now
+                        speak("오른쪽으로 조금 더 돌리세요", false)
+                    }
+                }
+                else -> {
+                    val boxRatio = (box.rect.width() * box.rect.height()) / totalArea
+                    val zoom = currentZoomRatio
+                    val newZoom = max(1.0f, currentZoomRatio * 0.95f)
+                    if (currentZoomRatio > 1.0f && now - lastZoomDecayTime >= ZOOM_DECAY_INTERVAL_MS) {
+                        lastZoomDecayTime = now
+                        cam.cameraControl.setZoomRatio(newZoom)
+                        currentZoomRatio = newZoom
+                    }
+                    if (distanceMm <= DISTANCE_NEAR_MM) {
+                        closeDistanceFrameCount++
+                        if (closeDistanceFrameCount >= CLOSE_DISTANCE_STABILITY_FRAMES &&
+                            now - lastActionGuidanceTime >= ACTION_GUIDANCE_COOLDOWN_MS) {
+                            lastActionGuidanceTime = now
+                            closeDistanceFrameCount = 0
+                            speak("손을 뻗어 확인해보세요", false)
+                        }
+                    } else {
+                        closeDistanceFrameCount = 0
+                        if (now - lastDistanceGuidanceTime >= DISTANCE_GUIDANCE_COOLDOWN_MS &&
+                            zoom <= 1.2f && boxRatio < TARGET_BOX_RATIO) {
+                            lastDistanceGuidanceTime = now
+                            speak("조금 더 앞으로 오세요", false)
+                        }
+                    }
+                }
             }
         }
     }
@@ -919,6 +1036,7 @@ class HomeFragment : Fragment() {
             touchFrameCount = 0
             releaseFrameCount = 0
             touchActive = false
+            closeDistanceFrameCount = 0
             lastTouchMidpointPx = null
             lastTouchTtsTimeMs = 0L
             latestHandsResult.set(null)
@@ -966,7 +1084,10 @@ class HomeFragment : Fragment() {
             touchActive = false
             lastTouchMidpointPx = null
             lastTouchTtsTimeMs = 0L
-            lastGuidanceTime = 0L
+            lastDirectionGuidanceTime = 0L
+            lastDistanceGuidanceTime = 0L
+            lastActionGuidanceTime = 0L
+            closeDistanceFrameCount = 0
             lastZoomDecayTime = 0L
             latestHandsResult.set(null)
             opticalFlowTracker.reset()
@@ -1367,7 +1488,7 @@ class HomeFragment : Fragment() {
                 val guidance = buildHandPositionGuidance(latestHandsResult.get(), box.rect, w, h)
                 if (!guidance.isNullOrBlank()) {
                     lastHandGuidanceTimeMs = System.currentTimeMillis()
-                    speak(guidance)
+                    speak(guidance, false)
                 }
                 handGuidanceHandler.postDelayed(this, HAND_GUIDANCE_INTERVAL_MS)
             }
@@ -1458,6 +1579,7 @@ class HomeFragment : Fragment() {
             val h = bitmap.height
             if (!firstResolutionLogged) {
                 firstResolutionLogged = true
+                Log.d(TAG, "Camera resolution (ImageAnalysis): ${w}x${h}, rotation=$rotationDegrees")
             }
             var inferMs = System.currentTimeMillis() - startTime
 
