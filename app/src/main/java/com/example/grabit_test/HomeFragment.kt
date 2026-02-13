@@ -167,6 +167,9 @@ class HomeFragment : Fragment() {
 
     private var lastSuccessfulValidationTimeMs = 0L
     private val REACQUIRE_INFERENCE_AFTER_MS = 2000L
+    private val MIN_SEARCH_DURATION_BEFORE_DETECTED_TTS_MS = 2500L
+    private var lastTimeEnteredSearchingMs = 0L
+    private var hasAnnouncedDetectedThisSearchSession = false
     private var touchConfirmInProgress = false
     private var touchConfirmScheduled = false
 
@@ -361,7 +364,7 @@ class HomeFragment : Fragment() {
 
     private fun startScanningDirect(targetLabel: String) {
         currentTargetLabel.set(targetLabel)
-        transitionToSearching()
+        transitionToSearching(isNewSearchSession = true)
         startCamera()
         startSearchTimeout()
         updateVoiceButtonVisibility()
@@ -487,7 +490,7 @@ class HomeFragment : Fragment() {
                                 } else {
                                     speak(VoicePrompts.PROMPT_TOUCH_RESTART) {
                                         voiceFlowController?.start()
-                                        transitionToSearching()
+                                        transitionToSearching(isNewSearchSession = true)
                                         currentTargetLabel.set("")
                                         updateSearchTargetLabel()
                                         updateVoiceButtonVisibility()
@@ -579,7 +582,7 @@ class HomeFragment : Fragment() {
             return
         }
         cancelSearchTimeout()
-        transitionToSearching()
+        transitionToSearching(isNewSearchSession = true)
         voiceSearchTargetLabel = targetClass
         currentTargetLabel.set(targetClass)
         binding.systemMessageText.text = "찾는 중: ${getTargetLabel()}"
@@ -663,7 +666,7 @@ class HomeFragment : Fragment() {
             touchActive = false
             touchFrameCount = 0
             releaseFrameCount = 0
-            transitionToSearching()
+            transitionToSearching(isNewSearchSession = true)
             stopCamera()
             currentTargetLabel.set("")
             updateSearchTargetLabel()
@@ -736,7 +739,7 @@ class HomeFragment : Fragment() {
                     _binding?.overlayView?.setDetections(listOf(box), frozenImageWidth, frozenImageHeight)
                 }
             },
-            onTrackingLost = { transitionToSearching(skipTtsDetectedReset = true) }
+            onTrackingLost = { transitionToSearching() }
         )
     }
 
@@ -1062,10 +1065,15 @@ class HomeFragment : Fragment() {
             latestHandsResult.set(null)
             binding.overlayView.setDetections(listOf(box), imageWidth, imageHeight)
             binding.overlayView.setFrozen(true)
-            binding.systemMessageText.text = "객체 탐지됨. 손을 뻗어 잡아주세요."
-            if (!ttsDetectedPlayed) {
+            val percent = (box.confidence * 100).toInt().coerceIn(0, 100)
+            binding.systemMessageText.text = "객체 탐지됨 (${percent}%). 손을 뻗어 잡아주세요."
+            val searchDurationMs = System.currentTimeMillis() - lastTimeEnteredSearchingMs
+            val shouldAnnounceDetected = !hasAnnouncedDetectedThisSearchSession ||
+                searchDurationMs >= MIN_SEARCH_DURATION_BEFORE_DETECTED_TTS_MS
+            if (shouldAnnounceDetected && !ttsDetectedPlayed) {
                 ttsDetectedPlayed = true
-                speak("객체를 탐지했습니다. 손을 뻗어 잡아주세요.")
+                hasAnnouncedDetectedThisSearchSession = true
+                speak("객체를 ${percent}% 확률로 탐지했습니다. 손을 뻗어 잡아주세요.")
             }
             if (voiceFlowController?.currentState == VoiceFlowController.VoiceFlowState.SEARCHING_PRODUCT) {
                 val requested = voiceSearchTargetLabel
@@ -1081,8 +1089,10 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private fun transitionToSearching(skipTtsDetectedReset: Boolean = false) {
+    private fun transitionToSearching(skipTtsDetectedReset: Boolean = false, isNewSearchSession: Boolean = false) {
         requireActivity().runOnUiThread {
+            lastTimeEnteredSearchingMs = System.currentTimeMillis()
+            if (isNewSearchSession) hasAnnouncedDetectedThisSearchSession = false
             stopPositionAnnounce()
             searchState = SearchState.SEARCHING
             lockedTargetLabel = ""
