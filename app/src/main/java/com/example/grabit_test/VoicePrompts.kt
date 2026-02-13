@@ -15,5 +15,7 @@ object VoicePrompts {
     const val PROMPT_TOUCH_RESTART = "그럼 화면을 터치해서 다시 시작해주세요."
     const val PROMPT_TOUCH_NOW = "지금 잡으세요."
     const val PROMPT_DONE = "완료되었습니다."
+    /** TOUCH_CONFIRM 긍정 대답 후 완전 종료 시 TTS */
+    const val PROMPT_FOUND_AND_END = "물건을 찾았습니다. 안내를 종료합니다"
 }
 

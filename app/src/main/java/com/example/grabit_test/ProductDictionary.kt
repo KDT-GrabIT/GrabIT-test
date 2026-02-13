@@ -119,26 +119,30 @@ object ProductDictionary {
     fun isLoaded(): Boolean = mapByClass.isNotEmpty()
 
     /**
-     * 49개 클래스 기준 실제 너비(mm). 그룹별 하드코딩.
-     * - 음료(ml/drink/tea/soda): 65mm
-     * - 슬림/소형(pringles, pepero): 80mm
-     * - 대형 박스(heim, moncher, margaret, daije, gosomi, chic_choc): 200mm
-     * - 일반 봉지 과자: 160mm
+     * 물리적 너비(mm) — 원거리 거리/걸음 안내용.
+     * 500ml_pet 65, 250ml_can 53, 355ml_can 65, snack_bag_normal 170,
+     * snack_bag_large 220, snack_box_12pack 250, 기타 100.
      */
     fun getPhysicalWidthMm(label: String): Float {
-        if (label.isBlank()) return 160f
+        if (label.isBlank()) return 100f
         val lower = label.trim().lowercase()
         return when {
-            // 슬림/소형 스낵 (80mm)
-            lower.contains("pringles") || lower.contains("pepero") -> 80f
-            // 대형 박스 과자 (200mm)
-            lower.contains("heim") || lower.contains("moncher") || lower.contains("margaret") ||
-            lower.contains("daije") || lower.contains("gosomi") || lower.contains("chic_choc") -> 200f
-            // 음료 (65mm): ml, drink, tea, soda
-            lower.contains("ml") || lower.contains("drink") || lower.contains("tea") ||
-            lower.contains("soda") -> 65f
-            // 일반 봉지 과자 (160mm)
-            else -> 160f
+            // snack_box_12pack 250mm
+            lower.contains("12pack") || (lower.contains("moncher") && lower.contains("cacao")) -> 250f
+            // snack_bag_large 220mm
+            lower.contains("heim") || lower.contains("daije") || lower.contains("gosomi") ||
+            lower.contains("chic_choc") || lower.contains("margaret") || lower.contains("matdongsan") -> 220f
+            // 250ml_can 53mm
+            lower.contains("250ml") -> 53f
+            // 355ml_can 65mm
+            lower.contains("355ml") -> 65f
+            // 500ml_pet 65mm (500ml, 238ml, 600ml 등 PET)
+            lower.contains("500ml") || lower.contains("238ml") || lower.contains("600ml") ||
+            lower.contains("drink") || lower.contains("tea") || lower.contains("soda") ||
+            lower.contains("200ml") || lower.contains("mccol") || lower.contains("17tea") -> 65f
+            // snack_bag_normal 170mm (일반 봉지/슬림 포함)
+            lower.contains("pringles") || lower.contains("pepero") || lower.contains("ml").not() -> 170f
+            else -> 100f
         }
     }
 

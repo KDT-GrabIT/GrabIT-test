@@ -25,4 +25,15 @@ class SharedViewModel : ViewModel() {
         _adminSelectedTarget.value = null
     }
 
+    /** 볼륨 키 롱프레스 시 음성 인식 등 실행 요청. MainActivity가 호출, HomeFragment가 구독 */
+    private val _volumeLongPressTrigger = MutableLiveData<Unit?>(null)
+    val volumeLongPressTrigger: LiveData<Unit?> = _volumeLongPressTrigger
+
+    fun triggerVolumeLongPress() {
+        _volumeLongPressTrigger.value = Unit
+    }
+
+    fun consumeVolumeLongPressTrigger() {
+        _volumeLongPressTrigger.value = null
+    }
 }

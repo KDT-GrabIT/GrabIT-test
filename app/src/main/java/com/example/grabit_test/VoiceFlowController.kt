@@ -58,6 +58,8 @@ class VoiceFlowController(
 
     private var lastSpokenText: String = ""
     private var currentProductName: String = ""
+    /** STT 세션 종료 시각. 4초 이내에는 자동 탐지 TTS(거리/방향 안내) 무시용 */
+    private var lastSttEndTime = 0L
 
     /** 앱 시작 시 호출: 상태만 APP_START로 두고, STT는 시작하지 않음 (화면 터치 후 startProductNameInput 호출) */
     fun start() {
@@ -284,4 +286,18 @@ class VoiceFlowController(
     }
 
     fun getCurrentProductName(): String = currentProductName
+
+    /** STT 대기 종료 또는 TOUCH_CONFIRM 해제 직후 호출. 4초간 자동 안내 TTS 및 TOUCH_CONFIRM 재진입 차단 */
+    fun notifySttEnded() {
+        lastSttEndTime = System.currentTimeMillis()
+    }
+
+    /** 사용자 대화 직후 4초 이내이면 true. 이 구간에는 자동 탐지 TTS·TOUCH_CONFIRM 재진입 무시 */
+    fun isInSttBreathingRoom(): Boolean =
+        (System.currentTimeMillis() - lastSttEndTime) < 4000L
+
+    /** 완전 리셋 시 breathing room 해제 (resetGlobalState 등에서 호출) */
+    fun resetBreathingRoom() {
+        lastSttEndTime = 0L
+    }
 }
