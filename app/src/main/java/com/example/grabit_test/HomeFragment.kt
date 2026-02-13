@@ -5,9 +5,13 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import android.util.Size
 import android.view.KeyEvent
@@ -642,12 +646,29 @@ class HomeFragment : Fragment() {
         }
     }
 
+    /** 탐지/접촉 확인 시 약 300ms 진동 (Vibrator API) */
+    private fun vibrateFeedback(durationMs: Long = 300L) {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (requireContext().getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            requireContext().getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator?.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(durationMs)
+        }
+    }
+
     private fun enterTouchConfirm() {
         if (touchConfirmInProgress) return
         touchConfirmInProgress = true
         touchConfirmScheduled = false
         waitingForTouchConfirm = true
         touchConfirmSttRetryCount = 0
+        vibrateFeedback()
         speak("상품에 닿았나요? 닿았으면 예라고 말해주세요.") {
             requireActivity().runOnUiThread { sttManager?.startListening() }
         }
@@ -1053,6 +1074,7 @@ class HomeFragment : Fragment() {
             if (shouldAnnounceDetected && !ttsDetectedPlayed) {
                 ttsDetectedPlayed = true
                 hasAnnouncedDetectedThisSearchSession = true
+                vibrateFeedback()
                 speak("객체를 ${percent}% 확률로 탐지했습니다. 손을 뻗어 잡아주세요.")
             }
             if (voiceFlowController?.currentState == VoiceFlowController.VoiceFlowState.SEARCHING_PRODUCT) {
