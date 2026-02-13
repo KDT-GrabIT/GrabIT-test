@@ -20,6 +20,13 @@ object ProductDictionary {
         val ttsKo: String
     )
 
+    /** 상품별 물리 너비(mm). 거리 추정·줌 로직용 */
+    data class ProductInfo(
+        val classLabel: String,
+        val physicalWidthMm: Float,
+        val displayNameKo: String
+    )
+
     /** key: 영어 클래스명, value: ProductEntry */
     private var mapByClass: Map<String, ProductEntry> = emptyMap()
 
@@ -110,4 +117,39 @@ object ProductDictionary {
 
     /** 로드 여부 */
     fun isLoaded(): Boolean = mapByClass.isNotEmpty()
+
+    /**
+     * 49개 클래스 기준 실제 너비(mm). 그룹별 하드코딩.
+     * - 음료(ml/drink/tea/soda): 65mm
+     * - 슬림/소형(pringles, pepero): 80mm
+     * - 대형 박스(heim, moncher, margaret, daije, gosomi, chic_choc): 200mm
+     * - 일반 봉지 과자: 160mm
+     */
+    fun getPhysicalWidthMm(label: String): Float {
+        if (label.isBlank()) return 160f
+        val lower = label.trim().lowercase()
+        return when {
+            // 슬림/소형 스낵 (80mm)
+            lower.contains("pringles") || lower.contains("pepero") -> 80f
+            // 대형 박스 과자 (200mm)
+            lower.contains("heim") || lower.contains("moncher") || lower.contains("margaret") ||
+            lower.contains("daije") || lower.contains("gosomi") || lower.contains("chic_choc") -> 200f
+            // 음료 (65mm): ml, drink, tea, soda
+            lower.contains("ml") || lower.contains("drink") || lower.contains("tea") ||
+            lower.contains("soda") -> 65f
+            // 일반 봉지 과자 (160mm)
+            else -> 160f
+        }
+    }
+
+    /** ProductInfo 반환 (표시명 + physicalWidthMm) */
+    fun getProductInfo(englishClass: String): ProductInfo? {
+        if (englishClass.isBlank()) return null
+        val entry = mapByClass[englishClass] ?: return null
+        return ProductInfo(
+            classLabel = englishClass,
+            physicalWidthMm = getPhysicalWidthMm(englishClass),
+            displayNameKo = entry.ttsKo
+        )
+    }
 }

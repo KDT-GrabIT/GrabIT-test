@@ -1,387 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.drawerlayout.widget.DrawerLayout
+<androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/drawerLayout"
+    android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/ivory_background">
 
-    <!-- 메인 콘텐츠 -->
-    <FrameLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
-
-            <!-- 화면 75% 지점 가이드라인 (카메라 영역) -->
-            <androidx.constraintlayout.widget.Guideline
-                android:id="@+id/guideline75"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                app:layout_constraintGuide_percent="0.75" />
-
-            <!-- 상단 영역: 첫 화면 + 카메라 + 메시지 오버레이 (첫 화면에서도 메시지 표시) -->
-            <FrameLayout
-                android:id="@+id/topAreaWrapper"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toTopOf="@id/guideline75"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-                <!-- ========== 첫 화면: 클릭하여 STT 활성화 ========== -->
-                <FrameLayout
-                    android:id="@+id/firstScreen"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@color/ivory_card"
-                    android:clickable="true"
-                    android:focusable="true">
-
-                    <TextView
-                        android:id="@+id/welcomeText"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:gravity="center"
-                        android:padding="32dp"
-                        android:text="화면을 터치해서 상품찾기를 시작해주세요"
-                        android:textColor="@color/text_primary"
-                        android:textSize="22sp"
-                        android:lineSpacingExtra="8dp" />
-
-                    <ProgressBar
-                        android:id="@+id/sttProgress"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="bottom|center_horizontal"
-                        android:layout_marginBottom="48dp"
-                        android:indeterminateTint="@color/accent_warm"
-                        android:visibility="gone" />
-                </FrameLayout>
-
-                <!-- ========== 카메라 화면 ========== -->
-                <FrameLayout
-                    android:id="@+id/cameraContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:visibility="gone">
-
-                    <androidx.camera.view.PreviewView
-                        android:id="@+id/previewView"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent" />
-
-                    <com.example.grabitTest.OverlayView
-                        android:id="@+id/overlayView"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent" />
-                </FrameLayout>
-            </FrameLayout>
-
-            <!-- 하단 상태 패널 (가이드라인~메시지 박스 위까지) -->
-            <ScrollView
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:fillViewport="true"
-                app:layout_constraintTop_toBottomOf="@id/guideline75"
-                app:layout_constraintBottom_toTopOf="@id/messageOverlayBottom"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-            <LinearLayout
-                android:id="@+id/statusPanel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp"
-                android:background="@color/ivory_panel">
-
-                <Button
-                    android:id="@+id/startSearchBtn"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="찾기 시작"
-                    android:visibility="gone" />
-
-                <LinearLayout
-                    android:id="@+id/targetRow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:visibility="gone">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="타겟: "
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <Spinner
-                        android:id="@+id/targetSpinner"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:minWidth="120dp" />
-
-                    <Button
-                        android:id="@+id/resetBtn"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="다시 찾기"
-                        android:visibility="gone"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/statusText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text=""
-                    android:textColor="@color/text_primary"
-                    android:textSize="14sp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:visibility="gone">
-
-                    <Button
-                        android:id="@+id/confirmBtn"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="확인"
-                        android:visibility="gone"
-                        android:textSize="12sp" />
-
-                    <Button
-                        android:id="@+id/reinputBtn"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="재입력"
-                        android:visibility="gone"
-                        android:textSize="12sp" />
-
-                    <Button
-                        android:id="@+id/retryBtn"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="다시 찾기"
-                        android:visibility="gone"
-                        android:textSize="12sp" />
-
-                    <ImageButton
-                        android:id="@+id/micButton"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="8dp"
-                        android:contentDescription="음성 입력"
-                        android:src="@android:drawable/ic_btn_speak_now"
-                        android:background="?attr/selectableItemBackgroundBorderless" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/sttResultText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/fpsText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:visibility="gone"
-                    android:text="FPS: --"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp"
-                    android:fontFamily="monospace" />
-
-                <TextView
-                    android:id="@+id/yoloxStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:visibility="gone"
-                    android:text="📦 YOLOX: Waiting..."
-                    android:textColor="@color/text_primary"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:id="@+id/handsStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:visibility="gone"
-                    android:text="📐 자이로: OFF"
-                    android:textColor="@color/text_primary"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:id="@+id/inferenceTime"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:visibility="gone"
-                    android:text="⏱️ Inference: -- ms"
-                    android:textColor="@color/accent_warm"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
-            </ScrollView>
-
-            <!-- 시스템/내가 말한 메시지 — 화면 맨 아래, 너비 100% (내비게이션 바와 겹치지 않도록 하단 여백) -->
-            <LinearLayout
-                android:id="@+id/messageOverlayBottom"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="56dp"
-                android:orientation="vertical"
-                android:background="@drawable/bg_message_panel"
-                android:padding="10dp"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-                <TextView
-                    android:id="@+id/searchTargetLabel"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_message_card"
-                    android:padding="8dp"
-                    android:text="찾는 품목: —"
-                    android:textColor="@color/accent_warm"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="시스템 메시지"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-                <TextView
-                    android:id="@+id/systemMessageText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:minHeight="40dp"
-                    android:gravity="center_vertical"
-                    android:background="@drawable/bg_message_card"
-                    android:padding="8dp"
-                    android:text=""
-                    android:textColor="@color/text_primary"
-                    android:textSize="14sp"
-                    android:maxLines="3"
-                    android:ellipsize="end" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="내가 말한 메시지"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-                <TextView
-                    android:id="@+id/userSpeechText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:minHeight="40dp"
-                    android:gravity="center_vertical"
-                    android:background="@drawable/bg_message_card"
-                    android:padding="8dp"
-                    android:text=""
-                    android:textColor="@color/accent_warm"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:maxLines="2"
-                    android:ellipsize="end" />
-            </LinearLayout>
-
-            <!-- 좌측 상단 햄버거 버튼 -->
-            <ImageButton
-                android:id="@+id/menuButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_margin="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="메뉴"
-                android:src="@drawable/ic_menu_hamburger"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <!-- 관리자: 클래스 드롭다운으로 빠른 선택 (버튼 위치: 햄버거 아래) -->
-            <Button
-                android:id="@+id/adminTextInputBtn"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="0dp"
-                android:textSize="11sp"
-                android:text="T"
-                android:contentDescription="관리자 선택"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/menuButton"
-                android:layout_margin="8dp" />
-
-            <!-- 우측 하단 첫 화면으로 돌아가기 버튼 (카메라 화면에서만 표시) -->
-            <Button
-                android:id="@+id/btnFirstScreen"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="12dp"
-                android:text="첫 화면"
-                android:textSize="14sp"
-                android:visibility="gone"
-                app:layout_constraintBottom_toTopOf="@id/guideline75"
-                app:layout_constraintEnd_toEndOf="parent" />
-        </androidx.constraintlayout.widget.ConstraintLayout>
-    </FrameLayout>
-
-    <!-- 좌측 슬라이드 품목 리스트 (Drawer) -->
-    <FrameLayout
-        android:id="@+id/drawerContent"
-        android:layout_width="280dp"
         android:layout_height="match_parent"
-        android:layout_gravity="start"
-        android:background="@color/ivory_card">
+        android:orientation="vertical">
 
-        <LinearLayout
+        <!-- 상단바: GrabIT 타이틀 -->
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/ivory_card"
+            android:elevation="4dp"
+            app:title="GrabIT"
+            app:titleTextColor="@color/text_primary"
+            app:titleTextAppearance="@style/TextAppearance.MaterialComponents.Headline6" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="20dp"
-                android:text="찾을 수 있는 품목"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+        <!-- 메인 영역: Fragment 컨테이너 -->
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/nav_host_fragment"
+            android:name="androidx.navigation.fragment.NavHostFragment"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            app:defaultNavHost="true"
+            app:navGraph="@navigation/nav_graph" />
 
-            <ListView
-                android:id="@+id/productListView"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:divider="@color/ivory_divider"
-                android:dividerHeight="1dp" />
-        </LinearLayout>
-    </FrameLayout>
-</androidx.drawerlayout.widget.DrawerLayout>
+        <!-- 하단 네비게이션 바 -->
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottom_navigation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/ivory_card"
+            app:elevation="8dp"
+            app:itemIconTint="@color/bottom_nav_item_color"
+            app:itemTextColor="@color/bottom_nav_item_color"
+            app:labelVisibilityMode="labeled"
+            app:menu="@menu/bottom_nav_menu" />
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
