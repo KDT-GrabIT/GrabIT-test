@@ -22,4 +22,15 @@
         android:name="com.example.grabitTest.ProfileFragment"
         android:label="내 정보"
         tools:layout="@layout/fragment_profile" />
+
+    <fragment
+        android:id="@+id/nav_search_history_detail"
+        android:name="com.example.grabitTest.SearchHistoryDetailFragment"
+        android:label="검색 이력"
+        tools:layout="@layout/fragment_search_history_detail">
+        <argument
+            android:name="type"
+            app:argType="string"
+            android:defaultValue="recent" />
+    </fragment>
 </navigation>

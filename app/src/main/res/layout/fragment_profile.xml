@@ -1,9 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ivory_background">
+    android:orientation="vertical"
+    android:background="@color/ivory_background"
+    android:padding="20dp">
 
-    <!-- 추후 기능 추가 예정 -->
-</FrameLayout>
+    <Button
+        android:id="@+id/btnFrequent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="자주 찾는 상품"
+        android:textSize="16sp"
+        android:paddingVertical="16dp"
+        android:backgroundTint="@color/accent_warm"
+        android:textColor="@color/white" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="16dp" />
+
+    <Button
+        android:id="@+id/btnRecent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="최근 찾은 상품"
+        android:textSize="16sp"
+        android:paddingVertical="16dp"
+        android:backgroundTint="@color/accent_warm"
+        android:textColor="@color/white" />
+</LinearLayout>

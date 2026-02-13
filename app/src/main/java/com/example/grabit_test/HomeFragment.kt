@@ -31,6 +31,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import com.example.grabit_test.data.AppDatabase
+import com.example.grabit_test.data.SearchHistoryRepository
+import com.example.grabit_test.data.history.SearchHistoryItem
 import com.example.grabitTest.data.synonym.SynonymRepository
 import com.example.grabitTest.databinding.FragmentHomeBinding
 import com.google.mediapipe.framework.image.BitmapImageBuilder
@@ -39,6 +42,7 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -317,6 +321,11 @@ class HomeFragment : Fragment() {
         requireActivity().runOnUiThread {
             binding.systemMessageText.text = "찾는 중: $displayName"
             startScanningDirect(targetLabel)
+        }
+        // 검색 이력: 찾고 싶은 상품을 선택한 시점에 한 번만 저장
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val repo = SearchHistoryRepository(AppDatabase.getInstance(requireContext().applicationContext))
+            repo.insert(SearchHistoryItem(query = displayName, classLabel = targetLabel, searchedAt = System.currentTimeMillis(), source = "admin"))
         }
     }
 
@@ -640,6 +649,11 @@ class HomeFragment : Fragment() {
         startCamera()
         startSearchTimeout()
         updateVoiceButtonVisibility()
+        // 검색 이력: 찾고 싶은 상품을 선택한 시점에 한 번만 저장
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val repo = SearchHistoryRepository(AppDatabase.getInstance(requireContext().applicationContext))
+            repo.insert(SearchHistoryItem(query = productName.trim(), classLabel = targetClass, searchedAt = System.currentTimeMillis(), source = "voice"))
+        }
     }
 
     private fun mapSpokenToClass(spoken: String): String {
@@ -1224,6 +1238,8 @@ class HomeFragment : Fragment() {
             binding.overlayView.setDetections(listOf(box), imageWidth, imageHeight)
             binding.overlayView.setFrozen(true)
             val percent = (box.confidence * 100).toInt().coerceIn(0, 100)
+            val actualLabel = actualPrimaryLabel ?: box.label
+            val fromVoice = voiceFlowController?.currentState == VoiceFlowController.VoiceFlowState.SEARCHING_PRODUCT
             binding.systemMessageText.text = "객체 탐지됨 (${percent}%). 손을 뻗어 잡아주세요."
             val searchDurationMs = System.currentTimeMillis() - lastTimeEnteredSearchingMs
             val shouldAnnounceDetected = !hasAnnouncedDetectedThisSearchSession ||
@@ -1234,13 +1250,12 @@ class HomeFragment : Fragment() {
                 vibrateFeedback()
                 speak("객체를 ${percent}% 확률로 탐지했습니다. 손을 뻗어 잡아주세요.")
             }
-            if (voiceFlowController?.currentState == VoiceFlowController.VoiceFlowState.SEARCHING_PRODUCT) {
+            if (fromVoice) {
                 val requested = voiceSearchTargetLabel
-                val actualLabel = actualPrimaryLabel ?: box.label
                 val isRequestedProduct = requested.isNullOrBlank() || requested == actualLabel
                 if (isRequestedProduct) {
                     voiceSearchTargetLabel = null
-                    voiceFlowController?.onSearchComplete(true, actualLabel, box.rect, imageWidth, imageHeight)
+                    voiceFlowController?.onSearchComplete(true, actualLabel, box.rect, imageWidth, imageHeight, percent)
                 }
             }
             startPositionAnnounce()
