@@ -58,11 +58,11 @@ export default function Presentation() {
         {showOverview ? (
           <div className="h-full overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-foreground">Slide Overview</h2>
+              <h2 className="text-2xl font-bold text-foreground">{'슬라이드 목록'}</h2>
               <button
                 onClick={() => setShowOverview(false)}
                 className="p-2 rounded-lg hover:bg-muted transition-colors"
-                aria-label="Close overview"
+                aria-label="목록 닫기"
               >
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
@@ -80,7 +80,7 @@ export default function Presentation() {
                 >
                   <div className="text-xs text-muted-foreground mb-1">{s.section}</div>
                   <div className="text-sm font-medium text-foreground leading-tight">{s.title}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Slide {i + 1}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{'슬라이드'} {i + 1}</div>
                 </button>
               ))}
             </div>
@@ -99,7 +99,7 @@ export default function Presentation() {
             onClick={prev}
             disabled={currentSlide === 0}
             className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Previous slide"
+            aria-label="이전 슬라이드"
           >
             <ChevronLeft className="w-5 h-5 text-foreground" />
           </button>
@@ -107,7 +107,7 @@ export default function Presentation() {
             onClick={next}
             disabled={currentSlide === slides.length - 1}
             className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Next slide"
+            aria-label="다음 슬라이드"
           >
             <ChevronRight className="w-5 h-5 text-foreground" />
           </button>
@@ -126,7 +126,7 @@ export default function Presentation() {
           <button
             onClick={() => setShowOverview((v) => !v)}
             className="p-2 rounded-lg hover:bg-muted transition-colors"
-            aria-label="Toggle slide overview"
+            aria-label="슬라이드 목록 토글"
           >
             <Grid3X3 className="w-5 h-5 text-muted-foreground" />
           </button>

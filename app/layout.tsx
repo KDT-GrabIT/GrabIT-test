@@ -6,8 +6,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" })
 
 export const metadata: Metadata = {
-  title: "GrabIT - Real-time Shopping Assistant for the Visually Impaired",
-  description: "On-Device AI product detection with auditory and haptic guidance. Project presentation.",
+  title: "GrabIT - 시각장애인을 위한 실시간 쇼핑 보조 어플리케이션",
+  description: "온디바이스 AI 상품 탐지 및 음성/촉각 안내 시스템. 프로젝트 발표.",
 }
 
 export const viewport: Viewport = {

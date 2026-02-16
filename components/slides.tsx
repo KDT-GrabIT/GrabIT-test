@@ -4,13 +4,13 @@ import { Eye, Hand, Volume2, Wifi, WifiOff, Cpu, Mic, Search, Database, Smartpho
 import { TitleSlide, ContentSlide, SectionSlide, ThreeColumnCard, FlowChart, BulletList, ComparisonTable, StatCard } from "./slide-layouts"
 import { CodeBlock, SplitCodeSlide } from "./code-block"
 
-/* ─── Slide 1: Title ─── */
+/* ─── Slide 1: 타이틀 ─── */
 function Slide1() {
   return (
     <TitleSlide
-      badge="KDT Final Project"
-      title="GrabIT: Real-time Shopping Assistant"
-      subtitle="On-Device AI for the visually impaired - guiding your hand to the product with sound and touch"
+      badge="KDT 파이널 프로젝트"
+      title="GrabIT: 실시간 쇼핑 보조 어플리케이션"
+      subtitle="온디바이스 AI로 시각장애인의 손을 상품까지 안내하는 음성 & 촉각 가이드"
     >
       <div className="flex items-center gap-6 mt-4">
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary">
@@ -19,21 +19,21 @@ function Slide1() {
         </div>
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-orange/10 text-accent-orange">
           <Volume2 className="w-5 h-5" />
-          <span className="text-sm font-medium">Audio Guide</span>
+          <span className="text-sm font-medium">{'음성 가이드'}</span>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-green/10 text-accent-green">
           <Smartphone className="w-5 h-5" />
-          <span className="text-sm font-medium">On-Device</span>
+          <span className="text-sm font-medium">{'온디바이스'}</span>
         </div>
       </div>
     </TitleSlide>
   )
 }
 
-/* ─── Slide 2: UX Video Placeholder ─── */
+/* ─── Slide 2: UX 영상 ─── */
 function Slide2() {
   return (
-    <ContentSlide title="User Experience Demo" subtitle="1-minute video: a blindfolded user finding a drink in a convenience store">
+    <ContentSlide title="사용자 경험 데모" subtitle="1분 영상: 안대를 착용한 사용자가 편의점에서 음료를 찾는 과정">
       <div className="flex items-center justify-center h-full">
         <div className="w-full max-w-3xl aspect-video bg-code-bg rounded-xl flex flex-col items-center justify-center gap-4 border border-border">
           <div className="w-16 h-16 rounded-full bg-accent-orange/20 flex items-center justify-center">
@@ -41,43 +41,43 @@ function Slide2() {
               <path d="M5 3l14 9-14 9V3z" fill="currentColor" />
             </svg>
           </div>
-          <p className="text-muted-foreground text-sm">Video Placeholder - UX Demo</p>
-          <p className="text-muted-foreground/60 text-xs">Tap to play during presentation</p>
+          <p className="text-muted-foreground text-sm">{'영상 플레이스홀더 - UX 데모'}</p>
+          <p className="text-muted-foreground/60 text-xs">{'발표 시 재생해주세요'}</p>
         </div>
       </div>
     </ContentSlide>
   )
 }
 
-/* ─── Slide 3: Background & Problem ─── */
+/* ─── Slide 3: 배경 & 문제 ─── */
 function Slide3() {
   return (
-    <ContentSlide title="Background & Problem" subtitle="Why existing solutions fall short for grocery shopping">
+    <ContentSlide title="배경 & 문제점" subtitle="기존 솔루션이 장보기에서 부족한 이유">
       <div className="grid grid-cols-2 gap-8 h-full items-center">
         <div className="flex flex-col gap-4">
           <div className="bg-card rounded-xl p-6 border border-border border-l-4 border-l-accent-orange">
-            <h3 className="text-lg font-semibold text-foreground mb-2">The Gap in Accessibility</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-2">{'접근성의 빈틈'}</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Existing OCR apps like Sullivan+ can read text, but they cannot guide the user&apos;s hand to the physical location of a product on a shelf.
+              {'Sullivan+ 같은 기존 OCR 앱은 텍스트를 읽을 수 있지만, 사용자의 손을 진열대 위 상품의 물리적 위치까지 안내하지는 못합니다.'}
             </p>
           </div>
           <div className="bg-card rounded-xl p-6 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-2">Real-world Impact</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-2">{'현실적 영향'}</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              252 million visually impaired people worldwide need active guidance, not just passive text reading, to shop independently.
+              {'전 세계 2억 5,200만 명의 시각장애인은 단순한 텍스트 읽기가 아니라, 독립적으로 쇼핑하기 위한 능동적 안내가 필요합니다.'}
             </p>
           </div>
         </div>
         <div className="flex flex-col gap-4">
           <div className="bg-accent-orange/5 rounded-xl p-6 border border-accent-orange/20">
-            <p className="text-xl font-bold text-accent-orange mb-2">{'"'}I know what it says, but where is it?{'"'}</p>
+            <p className="text-xl font-bold text-accent-orange mb-2">{'"뭐라고 써있는지는 알겠는데, 어디에 있는 거야?"'}</p>
             <p className="text-sm text-muted-foreground">
-              The core problem: detection without localization is incomplete assistance.
+              {'핵심 문제: 탐지만 하고 위치를 알려주지 않는 것은 불완전한 보조입니다.'}
             </p>
           </div>
           <div className="flex gap-4">
-            <StatCard value="252M" label="Visually Impaired (WHO)" color="primary" />
-            <StatCard value="0" label="Apps with Hand Guidance" color="orange" />
+            <StatCard value="2.52억" label="시각장애인 수 (WHO)" color="primary" />
+            <StatCard value="0개" label="손 안내 기능이 있는 앱" color="orange" />
           </div>
         </div>
       </div>
@@ -85,28 +85,28 @@ function Slide3() {
   )
 }
 
-/* ─── Slide 4: Core Solution ─── */
+/* ─── Slide 4: 핵심 솔루션 ─── */
 function Slide4() {
   return (
-    <ContentSlide title="Core Solution: 3 Pillars" subtitle="How GrabIT bridges the gap between detection and physical guidance">
+    <ContentSlide title="핵심 솔루션: 3가지 기둥" subtitle="탐지와 물리적 안내 사이의 격차를 GrabIT이 어떻게 해소하는가">
       <ThreeColumnCard
         items={[
           {
             icon: <Brain className="w-10 h-10 text-primary" />,
             title: "Vision AI",
-            description: "YOLOX-Nano runs on-device to detect 49 product classes in real-time. MediaPipe tracks the user's hand position simultaneously.",
+            description: "YOLOX-Nano가 온디바이스에서 49개 상품 클래스를 실시간 탐지합니다. MediaPipe가 동시에 사용자의 손 위치를 추적합니다.",
             color: "blue",
           },
           {
             icon: <Volume2 className="w-10 h-10 text-accent-orange" />,
-            title: "Audio Guide",
-            description: "Sine-wave beeps (440-880Hz) guide direction. TTS announces product name, distance, and positional cues like 'left' or 'right'.",
+            title: "음성 가이드",
+            description: "사인파 비프음(440-880Hz)으로 방향을 안내합니다. TTS가 상품명, 거리, '왼쪽', '오른쪽' 등의 위치 정보를 음성으로 알려줍니다.",
             color: "orange",
           },
           {
             icon: <WifiOff className="w-10 h-10 text-accent-green" />,
-            title: "On-Device Processing",
-            description: "Zero network latency. All AI inference runs locally via TFLite/LiteRT. Server is used only for synonym search during product lookup.",
+            title: "온디바이스 처리",
+            description: "네트워크 지연 없음. 모든 AI 추론은 TFLite/LiteRT를 통해 로컬에서 실행됩니다. 서버는 상품 검색 시 유의어 조회에만 사용됩니다.",
             color: "green",
           },
         ]}
@@ -115,19 +115,19 @@ function Slide4() {
   )
 }
 
-/* ─── Slide 5: Table of Contents ─── */
+/* ─── Slide 5: 목차 ─── */
 function Slide5() {
   const parts = [
-    { num: "01", title: "Team", color: "bg-primary" },
-    { num: "02", title: "Architecture", color: "bg-primary" },
-    { num: "03", title: "Scenario & Demo", color: "bg-accent-orange" },
-    { num: "04", title: "Tech Deep Dive", color: "bg-accent-orange" },
-    { num: "05", title: "Troubleshooting", color: "bg-accent-green" },
-    { num: "06", title: "Limitations", color: "bg-accent-green" },
-    { num: "07", title: "Conclusion & Roadmap", color: "bg-primary" },
+    { num: "01", title: "팀 소개", color: "bg-primary" },
+    { num: "02", title: "아키텍처", color: "bg-primary" },
+    { num: "03", title: "시나리오 & 데모", color: "bg-accent-orange" },
+    { num: "04", title: "기술 심층 분석", color: "bg-accent-orange" },
+    { num: "05", title: "트러블슈팅", color: "bg-accent-green" },
+    { num: "06", title: "한계점", color: "bg-accent-green" },
+    { num: "07", title: "결론 & 로드맵", color: "bg-primary" },
   ]
   return (
-    <ContentSlide title="Table of Contents">
+    <ContentSlide title="목차">
       <div className="grid grid-cols-2 gap-4 max-w-3xl mx-auto mt-4">
         {parts.map((p, i) => (
           <div key={i} className="flex items-center gap-4 p-4 bg-card rounded-lg border border-border slide-fade-in" style={{ animationDelay: `${(i + 1) * 0.08}s`, opacity: 0 }}>
@@ -142,15 +142,15 @@ function Slide5() {
   )
 }
 
-/* ─── Slide 6: Team ─── */
+/* ─── Slide 6: 팀 소개 ─── */
 function Slide6() {
   const members = [
-    { role: "PM / Android Core", name: "Member 1", skills: ["Kotlin", "CameraX", "TFLite", "Coroutines"] },
-    { role: "AI / Backend", name: "Member 2", skills: ["YOLOX", "Python", "Node.js", "MongoDB"] },
-    { role: "UI / VUI Design", name: "Member 3", skills: ["Figma", "TTS/STT", "Accessibility", "UX Research"] },
+    { role: "PM / Android 핵심 개발", name: "팀원 1", skills: ["Kotlin", "CameraX", "TFLite", "Coroutines"] },
+    { role: "AI / 백엔드", name: "팀원 2", skills: ["YOLOX", "Python", "Node.js", "MongoDB"] },
+    { role: "UI / VUI 설계", name: "팀원 3", skills: ["Figma", "TTS/STT", "접근성", "UX 리서치"] },
   ]
   return (
-    <ContentSlide title="Team" subtitle="3 members, complementary expertise">
+    <ContentSlide title="팀 소개" subtitle="3명의 팀원, 상호 보완적 전문성">
       <div className="grid grid-cols-3 gap-6 mt-4">
         {members.map((m, i) => (
           <div key={i} className="bg-card rounded-xl p-6 border border-border flex flex-col items-center text-center slide-fade-in" style={{ animationDelay: `${(i + 1) * 0.15}s`, opacity: 0 }}>
@@ -171,14 +171,14 @@ function Slide6() {
   )
 }
 
-/* ─── Slide 7: System Architecture ─── */
+/* ─── Slide 7: 시스템 아키텍처 ─── */
 function Slide7() {
   return (
-    <ContentSlide title="System Architecture" subtitle="On-device AI pipeline with minimal server dependency">
+    <ContentSlide title="시스템 아키텍처" subtitle="최소한의 서버 의존성을 가진 온디바이스 AI 파이프라인">
       <div className="flex flex-col items-center gap-6 mt-2">
         <div className="flex items-center gap-3 flex-wrap justify-center">
           <div className="bg-primary text-primary-foreground px-5 py-3 rounded-lg text-sm font-semibold flex items-center gap-2">
-            <Camera className="w-4 h-4" /> CameraX Input
+            <Camera className="w-4 h-4" /> CameraX 입력
           </div>
           <ArrowRight className="w-5 h-5 text-muted-foreground" />
           <div className="bg-accent-orange text-primary-foreground px-5 py-3 rounded-lg text-sm font-semibold flex items-center gap-2">
@@ -186,16 +186,16 @@ function Slide7() {
           </div>
           <ArrowRight className="w-5 h-5 text-muted-foreground" />
           <div className="bg-accent-green text-primary-foreground px-5 py-3 rounded-lg text-sm font-semibold flex items-center gap-2">
-            <Volume2 className="w-4 h-4" /> AudioTrack Output
+            <Volume2 className="w-4 h-4" /> AudioTrack 출력
           </div>
         </div>
-        <div className="text-xs text-muted-foreground font-mono tracking-wide">ALL ON-DEVICE (ZERO LATENCY)</div>
+        <div className="text-xs text-muted-foreground font-mono tracking-wide">{'모두 온디바이스 (지연 시간 제로)'}</div>
         <div className="w-px h-8 bg-border" />
         <div className="flex items-center gap-3">
           <div className="bg-muted text-foreground px-5 py-3 rounded-lg text-sm font-semibold flex items-center gap-2 border border-border">
-            <Server className="w-4 h-4" /> Synonym API
+            <Server className="w-4 h-4" /> {'유의어 API'}
           </div>
-          <span className="text-xs text-muted-foreground">(Node.js + MongoDB, search only)</span>
+          <span className="text-xs text-muted-foreground">{'(Node.js + MongoDB, 검색 전용)'}</span>
         </div>
         <div className="grid grid-cols-3 gap-4 mt-4 w-full max-w-3xl">
           <div className="bg-card rounded-lg p-4 border border-border">
@@ -207,8 +207,8 @@ function Slide7() {
             <p className="text-xs text-muted-foreground">YOLOX-Nano (TFLite), MediaPipe Hands, OpenCV</p>
           </div>
           <div className="bg-card rounded-lg p-4 border border-border">
-            <h4 className="text-sm font-semibold text-accent-green mb-2">Server</h4>
-            <p className="text-xs text-muted-foreground">Node.js, MongoDB, Python (e5-small embedding)</p>
+            <h4 className="text-sm font-semibold text-accent-green mb-2">{'서버'}</h4>
+            <p className="text-xs text-muted-foreground">Node.js, MongoDB, Python (e5-small 임베딩)</p>
           </div>
         </div>
       </div>
@@ -216,10 +216,10 @@ function Slide7() {
   )
 }
 
-/* ─── Slide 8: Tech Stack ─── */
+/* ─── Slide 8: 기술 스택 ─── */
 function Slide8() {
   return (
-    <ContentSlide title="Tech Stack" subtitle="Optimized for on-device performance and accessibility">
+    <ContentSlide title="기술 스택" subtitle="온디바이스 성능과 접근성에 최적화">
       <div className="grid grid-cols-3 gap-6 mt-2">
         <div className="bg-card rounded-xl p-6 border border-border border-t-4 border-t-primary">
           <div className="flex items-center gap-2 mb-4">
@@ -241,7 +241,7 @@ function Slide8() {
             <h3 className="text-lg font-semibold">AI / ML</h3>
           </div>
           <div className="flex flex-col gap-2">
-            {["YOLOX-Nano (FP16 TFLite)", "MediaPipe Hand Landmarker", "OpenCV Lucas-Kanade", "Roboflow + MobileSAM3", "49 Product Classes"].map((t, i) => (
+            {["YOLOX-Nano (FP16 TFLite)", "MediaPipe Hand Landmarker", "OpenCV Lucas-Kanade", "Roboflow + MobileSAM3", "49개 상품 클래스"].map((t, i) => (
               <div key={i} className="flex items-center gap-2">
                 <CheckCircle className="w-3.5 h-3.5 text-accent-orange shrink-0" />
                 <span className="text-sm text-foreground">{t}</span>
@@ -252,10 +252,10 @@ function Slide8() {
         <div className="bg-card rounded-xl p-6 border border-border border-t-4 border-t-accent-green">
           <div className="flex items-center gap-2 mb-4">
             <Server className="w-6 h-6 text-accent-green" />
-            <h3 className="text-lg font-semibold">Server</h3>
+            <h3 className="text-lg font-semibold">{'서버'}</h3>
           </div>
           <div className="flex flex-col gap-2">
-            {["Node.js + Express", "MongoDB Atlas", "Python (e5-small embedding)", "Vector Search (Synonyms)", "REST API (No Auth)"].map((t, i) => (
+            {["Node.js + Express", "MongoDB Atlas", "Python (e5-small 임베딩)", "벡터 검색 (유의어)", "REST API (인증 없음)"].map((t, i) => (
               <div key={i} className="flex items-center gap-2">
                 <CheckCircle className="w-3.5 h-3.5 text-accent-green shrink-0" />
                 <span className="text-sm text-foreground">{t}</span>
@@ -268,36 +268,36 @@ function Slide8() {
   )
 }
 
-/* ─── Slide 9: User Journey ─── */
+/* ─── Slide 9: 사용자 여정 ─── */
 function Slide9() {
   return (
-    <ContentSlide title="User Journey" subtitle="From wake-up to product in hand">
+    <ContentSlide title="사용자 여정" subtitle="앱 시작부터 상품을 손에 쥐기까지">
       <div className="flex flex-col items-center gap-8 mt-4">
         <FlowChart
           steps={[
-            { label: "Wake Up", sub: "Touch / Vol Up", color: "blue" },
-            { label: "Voice Input", sub: "STT: 'Coke'", color: "blue" },
-            { label: "Confirm", sub: "TTS + STT", color: "orange" },
-            { label: "Search", sub: "YOLOX Scan", color: "orange" },
-            { label: "Guide", sub: "Beep + TTS", color: "green" },
-            { label: "Grasp", sub: "Hand Detection", color: "green" },
+            { label: "앱 시작", sub: "터치 / 볼륨 업", color: "blue" },
+            { label: "음성 입력", sub: "STT: '콜라'", color: "blue" },
+            { label: "확인", sub: "TTS + STT", color: "orange" },
+            { label: "탐색", sub: "YOLOX 스캔", color: "orange" },
+            { label: "안내", sub: "비프 + TTS", color: "green" },
+            { label: "파지", sub: "손 감지", color: "green" },
           ]}
         />
         <div className="grid grid-cols-3 gap-6 w-full max-w-3xl mt-4">
           <div className="bg-card rounded-lg p-4 border border-border text-center">
-            <div className="text-2xl font-bold text-primary">Step 1-2</div>
-            <div className="text-xs text-muted-foreground mt-1">Voice Interaction</div>
-            <div className="text-xs text-muted-foreground">VoiceFlowController State Machine</div>
+            <div className="text-2xl font-bold text-primary">{'1-2단계'}</div>
+            <div className="text-xs text-muted-foreground mt-1">{'음성 인터랙션'}</div>
+            <div className="text-xs text-muted-foreground">VoiceFlowController 상태 머신</div>
           </div>
           <div className="bg-card rounded-lg p-4 border border-border text-center">
-            <div className="text-2xl font-bold text-accent-orange">Step 3-4</div>
-            <div className="text-xs text-muted-foreground mt-1">AI Detection</div>
-            <div className="text-xs text-muted-foreground">YOLOX + Gyro Tracking</div>
+            <div className="text-2xl font-bold text-accent-orange">{'3-4단계'}</div>
+            <div className="text-xs text-muted-foreground mt-1">AI 탐지</div>
+            <div className="text-xs text-muted-foreground">YOLOX + 자이로 트래킹</div>
           </div>
           <div className="bg-card rounded-lg p-4 border border-border text-center">
-            <div className="text-2xl font-bold text-accent-green">Step 5-6</div>
-            <div className="text-xs text-muted-foreground mt-1">Physical Guidance</div>
-            <div className="text-xs text-muted-foreground">Beep + MediaPipe Hands</div>
+            <div className="text-2xl font-bold text-accent-green">{'5-6단계'}</div>
+            <div className="text-xs text-muted-foreground mt-1">{'물리적 안내'}</div>
+            <div className="text-xs text-muted-foreground">{'비프음 + MediaPipe Hands'}</div>
           </div>
         </div>
       </div>
@@ -305,10 +305,10 @@ function Slide9() {
   )
 }
 
-/* ─── Slide 10: Demo Video ─── */
+/* ─── Slide 10: 데모 영상 ─── */
 function Slide10() {
   return (
-    <ContentSlide title="Demo Video" subtitle="Watch GrabIT in action">
+    <ContentSlide title="데모 영상" subtitle="GrabIT 실제 작동 영상">
       <div className="flex items-center justify-center h-full">
         <div className="w-full max-w-3xl aspect-video bg-code-bg rounded-xl flex flex-col items-center justify-center gap-4 border border-border">
           <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
@@ -316,37 +316,37 @@ function Slide10() {
               <path d="M5 3l14 9-14 9V3z" fill="currentColor" />
             </svg>
           </div>
-          <p className="text-muted-foreground text-sm">Demo Video Placeholder</p>
-          <p className="text-muted-foreground/60 text-xs">Full walkthrough of product detection and hand guidance</p>
+          <p className="text-muted-foreground text-sm">{'데모 영상 플레이스홀더'}</p>
+          <p className="text-muted-foreground/60 text-xs">{'상품 탐지 및 손 안내 전체 과정 워크스루'}</p>
         </div>
       </div>
     </ContentSlide>
   )
 }
 
-/* ─── Slide 11: Live Demo ─── */
+/* ─── Slide 11: 라이브 데모 ─── */
 function Slide11() {
   return (
-    <ContentSlide title="Live Demo" subtitle="Phone mirroring and QR code for audience testing">
+    <ContentSlide title="라이브 데모" subtitle="폰 미러링 및 QR 코드를 통한 청중 체험">
       <div className="flex items-center justify-center h-full gap-8">
         <div className="bg-card rounded-xl p-8 border border-border flex flex-col items-center gap-4 w-64">
           <Smartphone className="w-16 h-16 text-primary" />
-          <h3 className="text-lg font-semibold text-foreground">Phone Mirroring</h3>
-          <p className="text-sm text-muted-foreground text-center">scrcpy or Vysor connected to projector</p>
+          <h3 className="text-lg font-semibold text-foreground">{'폰 미러링'}</h3>
+          <p className="text-sm text-muted-foreground text-center">{'scrcpy 또는 Vysor로 프로젝터에 연결'}</p>
         </div>
         <div className="bg-card rounded-xl p-8 border border-border flex flex-col items-center gap-4 w-64">
           <div className="w-32 h-32 bg-muted rounded-lg flex items-center justify-center border border-border">
             <span className="text-muted-foreground text-xs">QR Code</span>
           </div>
-          <h3 className="text-lg font-semibold text-foreground">Download APK</h3>
-          <p className="text-sm text-muted-foreground text-center">Scan to install GrabIT on your device</p>
+          <h3 className="text-lg font-semibold text-foreground">APK 다운로드</h3>
+          <p className="text-sm text-muted-foreground text-center">{'스캔하여 GrabIT을 기기에 설치하세요'}</p>
         </div>
       </div>
     </ContentSlide>
   )
 }
 
-/* ─── Slide 12: VUI & Haptics ─── */
+/* ─── Slide 12: VUI & 햅틱 피드백 ─── */
 function Slide12() {
   const code = `enum class VoiceFlowState {
   APP_START,
@@ -358,7 +358,7 @@ function Slide12() {
   SEARCH_FAILED
 }
 
-// State transition
+// 상태 전환
 private fun transitionTo(state: VoiceFlowState) {
   currentState = state
   isNextStepVoiceInput = when (state) {
@@ -369,18 +369,18 @@ private fun transitionTo(state: VoiceFlowState) {
 }`
   return (
     <SplitCodeSlide
-      title="VUI & Haptic Feedback"
-      subtitle="State Machine drives the entire voice interaction"
+      title="VUI & 햅틱 피드백"
+      subtitle="상태 머신(State Machine)이 전체 음성 인터랙션을 제어합니다"
       code={code}
       filename="VoiceFlowController.kt"
       language="Kotlin"
       accentColor="accent-orange"
       bullets={[
-        "7-state FSM: APP_START -> WAITING_PRODUCT_NAME -> CONFIRM -> SEARCHING -> RESULT/FAILED",
-        "TTS speaks, then STT listens - sequential, no overlap",
-        "Volume Up long-press: skip to voice input anywhere",
-        "Volume Down long-press: skip current TTS and start STT immediately",
-        "4-second 'breathing room' after STT ends to suppress auto-guidance TTS",
+        "7개 상태 FSM: APP_START -> WAITING_PRODUCT_NAME -> CONFIRM -> SEARCHING -> RESULT/FAILED",
+        "TTS가 먼저 말하고, 이후 STT가 듣기 시작 - 순차 실행, 겹침 없음",
+        "볼륨 업 길게 누르기: 어디서든 음성 입력으로 바로 진입",
+        "볼륨 다운 길게 누르기: 현재 TTS를 건너뛰고 즉시 STT 시작",
+        "STT 종료 후 4초 '숨쉬기 시간'으로 자동 안내 TTS 억제",
       ]}
     />
   )
@@ -415,64 +415,64 @@ function Slide13() {
 }`
   return (
     <SplitCodeSlide
-      title="BeepPlayer: Sine Wave Generation"
-      subtitle="Zero-latency audio feedback using AudioTrack"
+      title="BeepPlayer: 사인파 생성"
+      subtitle="AudioTrack을 이용한 지연 없는 음성 피드백"
       code={code}
       filename="BeepPlayer.kt"
       language="Kotlin"
       accentColor="accent-green"
       bullets={[
-        "Generates raw PCM 16-bit sine wave at 880Hz (configurable 440-880Hz for distance feedback)",
-        "MODE_STATIC: entire waveform pre-loaded into buffer for instant playback",
-        "No MediaPlayer overhead - direct AudioTrack API for < 5ms latency",
-        "reloadStaticData() allows repeated playback without re-allocation",
-        "Handler.postDelayed ensures clean stop + callback sequencing",
+        "880Hz 원시 PCM 16비트 사인파 생성 (거리에 따라 440-880Hz 가변)",
+        "MODE_STATIC: 전체 파형을 버퍼에 미리 로드하여 즉시 재생",
+        "MediaPlayer 오버헤드 없음 - AudioTrack API 직접 사용으로 5ms 미만 지연",
+        "reloadStaticData()로 재할당 없이 반복 재생 가능",
+        "Handler.postDelayed로 깔끔한 정지 + 콜백 순서 보장",
       ]}
     />
   )
 }
 
-/* ─── Slide 14: YOLOX Object Detection ─── */
+/* ─── Slide 14: YOLOX 객체 탐지 ─── */
 function Slide14() {
   return (
-    <ContentSlide title="YOLOX Object Detection" subtitle="Nano model optimized for mobile inference">
+    <ContentSlide title="YOLOX 객체 탐지" subtitle="모바일 추론에 최적화된 Nano 모델">
       <div className="grid grid-cols-2 gap-6 h-full">
         <div className="flex flex-col gap-4">
           <div className="bg-card rounded-xl p-5 border border-border">
             <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
-              <Brain className="w-5 h-5 text-accent-orange" /> Model Pipeline
+              <Brain className="w-5 h-5 text-accent-orange" /> {'모델 파이프라인'}
             </h3>
             <div className="flex flex-col gap-2">
               <FlowChart steps={[
-                { label: "Collect", sub: "5000+ images", color: "muted" },
-                { label: "Label", sub: "Roboflow", color: "muted" },
-                { label: "Auto-label", sub: "MobileSAM3", color: "orange" },
-                { label: "Train", sub: "YOLOX-Nano", color: "blue" },
+                { label: "수집", sub: "5000+장", color: "muted" },
+                { label: "라벨링", sub: "Roboflow", color: "muted" },
+                { label: "자동 라벨링", sub: "MobileSAM3", color: "orange" },
+                { label: "학습", sub: "YOLOX-Nano", color: "blue" },
               ]} />
             </div>
           </div>
           <div className="bg-card rounded-xl p-5 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-3">Training Details</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-3">{'학습 세부 사항'}</h3>
             <BulletList items={[
-              "YOLOX-Nano backbone (lightweight, mobile-first)",
-              "Float16 quantization for TFLite deployment",
-              "49 product classes (drinks, snacks, daily necessities)",
-              "Roboflow for annotation + augmentation pipeline",
-              "MobileSAM3 for semi-automatic mask generation",
+              "YOLOX-Nano 백본 (경량, 모바일 우선 설계)",
+              "TFLite 배포를 위한 Float16 양자화",
+              "49개 상품 클래스 (음료, 과자, 생활용품)",
+              "Roboflow로 어노테이션 + 증강 파이프라인 구축",
+              "MobileSAM3로 반자동 마스크 생성",
             ]} color="accent-orange" />
           </div>
         </div>
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <StatCard value="49" label="Product Classes" color="orange" />
-            <StatCard value="FP16" label="Quantization" color="primary" />
-            <StatCard value="16MB" label="Model Size" color="green" />
-            <StatCard value="~30ms" label="Inference Time" color="orange" />
+            <StatCard value="49" label="상품 클래스" color="orange" />
+            <StatCard value="FP16" label="양자화" color="primary" />
+            <StatCard value="16MB" label="모델 크기" color="green" />
+            <StatCard value="~30ms" label="추론 시간" color="orange" />
           </div>
           <div className="bg-accent-orange/5 rounded-xl p-5 border border-accent-orange/20 flex-1">
-            <h3 className="text-lg font-semibold text-accent-orange mb-2">Why YOLOX-Nano?</h3>
+            <h3 className="text-lg font-semibold text-accent-orange mb-2">{'왜 YOLOX-Nano인가?'}</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Anchor-free design eliminates hyperparameter tuning. Decoupled head improves small object detection. Nano variant achieves real-time inference on mobile GPUs with minimal accuracy trade-off.
+              {'앵커 프리 설계로 하이퍼파라미터 튜닝이 불필요합니다. 디커플드 헤드는 작은 객체 탐지 성능을 향상시킵니다. Nano 변형은 모바일 GPU에서 최소한의 정확도 손실로 실시간 추론을 달성합니다.'}
             </p>
           </div>
         </div>
@@ -481,10 +481,10 @@ function Slide14() {
   )
 }
 
-/* ─── Slide 15: LiteRT & Optimization ─── */
+/* ─── Slide 15: LiteRT & 최적화 ─── */
 function Slide15() {
   return (
-    <ContentSlide title="LiteRT & Model Optimization" subtitle="From PyTorch to on-device TFLite deployment">
+    <ContentSlide title="LiteRT & 모델 최적화" subtitle="PyTorch에서 온디바이스 TFLite 배포까지">
       <div className="flex flex-col gap-6 mt-2">
         <div className="flex items-center justify-center gap-4">
           <div className="bg-card px-6 py-4 rounded-lg border border-border text-center">
@@ -499,7 +499,7 @@ function Slide15() {
           <div className="bg-card px-6 py-4 rounded-lg border border-border text-center">
             <div className="text-sm font-mono text-muted-foreground">.onnx</div>
             <div className="text-2xl font-bold text-foreground">~100MB</div>
-            <div className="text-xs text-muted-foreground">Intermediate</div>
+            <div className="text-xs text-muted-foreground">{'중간 단계'}</div>
           </div>
           <div className="flex flex-col items-center gap-1">
             <ArrowRight className="w-6 h-6 text-accent-orange" />
@@ -508,26 +508,26 @@ function Slide15() {
           <div className="bg-accent-green/10 px-6 py-4 rounded-lg border border-accent-green/30 text-center">
             <div className="text-sm font-mono text-accent-green">.tflite</div>
             <div className="text-2xl font-bold text-accent-green">16MB</div>
-            <div className="text-xs text-muted-foreground">On-Device</div>
+            <div className="text-xs text-muted-foreground">{'온디바이스'}</div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-6">
           <div className="bg-card rounded-xl p-5 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-3">FP16 Quantization</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-3">FP16 양자화</h3>
             <BulletList items={[
-              "Reduces model size by ~12x (200MB -> 16MB)",
-              "Minimal accuracy loss (< 1% mAP drop)",
-              "GPU delegate compatible for hardware acceleration",
-              "FlatBuffers serialization for zero-copy loading",
+              "모델 크기 약 12배 감소 (200MB -> 16MB)",
+              "정확도 손실 최소 (mAP 1% 미만 하락)",
+              "하드웨어 가속을 위한 GPU Delegate 호환",
+              "FlatBuffers 직렬화로 제로 카피 로딩",
             ]} color="accent-green" />
           </div>
           <div className="bg-card rounded-xl p-5 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-3">LiteRT Runtime</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-3">{'LiteRT 런타임'}</h3>
             <BulletList items={[
-              "Upgraded from TensorFlow Lite to LiteRT (Google's new brand)",
-              "GPU Delegate for parallel inference on mobile GPU",
-              "Interpreter API with ByteBuffer input/output",
-              "Coroutines integration: inference on Dispatchers.Default",
+              "TensorFlow Lite에서 LiteRT로 업그레이드 (Google 신규 브랜드)",
+              "모바일 GPU 병렬 추론을 위한 GPU Delegate",
+              "ByteBuffer 입출력의 Interpreter API",
+              "코루틴 통합: Dispatchers.Default에서 추론 실행",
             ]} color="primary" />
           </div>
         </div>
@@ -539,45 +539,45 @@ function Slide15() {
 /* ─── Slide 16: CameraX & MediaPipe ─── */
 function Slide16() {
   return (
-    <ContentSlide title="CameraX + MediaPipe Pipeline" subtitle="Dual AI model: YOLOX detects products, MediaPipe detects hands">
+    <ContentSlide title="CameraX + MediaPipe 파이프라인" subtitle="이중 AI 모델: YOLOX가 상품을, MediaPipe가 손을 탐지">
       <div className="flex flex-col items-center gap-6 mt-2">
         <div className="flex items-center gap-3 flex-wrap justify-center">
           <div className="bg-primary/10 text-primary px-4 py-3 rounded-lg text-sm font-semibold flex items-center gap-2">
-            <Camera className="w-4 h-4" /> CameraX Frame
+            <Camera className="w-4 h-4" /> {'CameraX 프레임'}
           </div>
           <ArrowRight className="w-5 h-5 text-muted-foreground" />
           <div className="flex flex-col gap-2">
-            <div className="bg-accent-orange/10 text-accent-orange px-4 py-2 rounded-lg text-xs font-semibold">YOLOX: Product BBox</div>
-            <div className="bg-accent-green/10 text-accent-green px-4 py-2 rounded-lg text-xs font-semibold">MediaPipe: Hand Landmarks</div>
+            <div className="bg-accent-orange/10 text-accent-orange px-4 py-2 rounded-lg text-xs font-semibold">{'YOLOX: 상품 바운딩 박스'}</div>
+            <div className="bg-accent-green/10 text-accent-green px-4 py-2 rounded-lg text-xs font-semibold">{'MediaPipe: 손 랜드마크'}</div>
           </div>
           <ArrowRight className="w-5 h-5 text-muted-foreground" />
           <div className="bg-primary text-primary-foreground px-4 py-3 rounded-lg text-sm font-semibold">
-            Coordinate Mapping
+            {'좌표 매핑'}
           </div>
           <ArrowRight className="w-5 h-5 text-muted-foreground" />
           <div className="bg-accent-green text-primary-foreground px-4 py-3 rounded-lg text-sm font-semibold flex items-center gap-2">
-            <Hand className="w-4 h-4" /> Touch Detection
+            <Hand className="w-4 h-4" /> {'터치 감지'}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-6 w-full mt-2">
           <div className="bg-card rounded-xl p-5 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-3">YOLOX Inference Path</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-3">{'YOLOX 추론 경로'}</h3>
             <BulletList items={[
-              "ImageProxy -> RGBA Bitmap -> resize to 416x416",
-              "ByteBuffer normalization (0-1 range)",
-              "TFLite Interpreter.run() on background thread",
-              "NMS + confidence filtering (threshold: 0.5)",
-              "Output: classId, confidence, bounding box (x,y,w,h)",
+              "ImageProxy -> RGBA Bitmap -> 416x416 리사이즈",
+              "ByteBuffer 정규화 (0-1 범위)",
+              "백그라운드 스레드에서 TFLite Interpreter.run() 실행",
+              "NMS + 신뢰도 필터링 (임계값: 0.5)",
+              "출력: classId, confidence, 바운딩 박스 (x,y,w,h)",
             ]} color="accent-orange" />
           </div>
           <div className="bg-card rounded-xl p-5 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-3">MediaPipe Hand Path</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-3">{'MediaPipe 손 경로'}</h3>
             <BulletList items={[
-              "CameraX frame -> BitmapImageBuilder -> MPImage",
-              "HandLandmarker.detect() returns 21 landmarks per hand",
-              "Extract fingertip (INDEX_FINGER_TIP, landmark #8)",
-              "Map normalized coords to image pixel space",
-              "Overlap check: fingertip inside expanded product BBox",
+              "CameraX 프레임 -> BitmapImageBuilder -> MPImage",
+              "HandLandmarker.detect()로 손당 21개 랜드마크 반환",
+              "검지 끝(INDEX_FINGER_TIP, 랜드마크 #8) 추출",
+              "정규화 좌표를 이미지 픽셀 공간으로 변환",
+              "겹침 검사: 검지 끝이 확장된 상품 BBox 안에 있는지 확인",
             ]} color="accent-green" />
           </div>
         </div>
@@ -586,9 +586,9 @@ function Slide16() {
   )
 }
 
-/* ─── Slide 17: Gyro Tracking ─── */
+/* ─── Slide 17: 자이로 트래킹 ─── */
 function Slide17() {
-  const code = `// GyroTrackingManager.kt - Core Logic
+  const code = `// GyroTrackingManager.kt - 핵심 로직
 private fun processRotationVector(event: SensorEvent) {
   SensorManager.getRotationMatrixFromVector(
     currentRotationMatrix, rv
@@ -598,37 +598,37 @@ private fun processRotationVector(event: SensorEvent) {
   var deltaYaw   = orientation[0] - initialOrientation[0]
   var deltaPitch  = orientation[1] - initialOrientation[1]
 
-  // Camera rotates right -> object moves LEFT on screen
+  // 카메라가 오른쪽으로 회전 -> 객체는 화면에서 왼쪽으로 이동
   val rotationShiftX = -deltaYaw * pixelsPerRadianX
                        * SENSITIVITY_FACTOR
   val rotationShiftY = deltaPitch * pixelsPerRadianY
                        * SENSITIVITY_FACTOR
 
-  // Smooth with exponential moving average
+  // 지수 이동 평균으로 스무딩
   val newLeft = currentSmoothedRect.left +
     (targetX - currentSmoothedRect.left) * SMOOTHING_ALPHA
 }`
   return (
     <SplitCodeSlide
-      title="Gyro Stabilization"
-      subtitle="Lock bounding box in world-space using rotation sensors"
+      title="자이로 안정화"
+      subtitle="회전 센서를 활용하여 바운딩 박스를 월드 공간에 고정"
       code={code}
       filename="GyroTrackingManager.kt"
       language="Kotlin"
       accentColor="primary"
       bullets={[
-        "Rotation Vector sensor -> delta yaw/pitch from initial orientation",
-        "Reverse camera motion: camera pans right = box shifts left",
-        "Pixels-per-radian conversion using known FOV (79deg horizontal)",
-        "Exponential smoothing (alpha=0.25) to suppress jitter",
-        "500ms warmup period to stabilize sensor readings",
-        "Out-of-bounds detection: 15 consecutive frames before tracking loss",
+        "회전 벡터 센서 -> 초기 방향으로부터의 deltaYaw/deltaPitch 계산",
+        "카메라 움직임 역보정: 카메라가 오른쪽 패닝 = 박스는 왼쪽으로 이동",
+        "알려진 FOV(수평 79도)를 이용한 픽셀/라디안 변환",
+        "지터 억제를 위한 지수 스무딩 (alpha=0.25)",
+        "센서 판독값 안정화를 위한 500ms 웜업 기간",
+        "범위 이탈 감지: 15프레임 연속 이탈 시 트래킹 손실 판정",
       ]}
     />
   )
 }
 
-/* ─── Slide 18: Occlusion Handling ─── */
+/* ─── Slide 18: 오클루전 처리 ─── */
 function Slide18() {
   const code = `// OpticalFlowTracker.kt
 fun update(
@@ -636,90 +636,90 @@ fun update(
   excludeHandRect: RectF?,
   excludeBoxRect: RectF?
 ): Pair<Float, Float>? {
-  // Downscale to 320x240 for speed
+  // 속도를 위해 320x240으로 다운스케일
   val smallBitmap = Bitmap.createScaledBitmap(
     bitmap, processWidth, processHeight, true
   )
-  // Mask out hand & target regions
+  // 손 & 타겟 영역 마스킹
   val mask = createExcludeMask(pw, ph,
     handRect, boxRect, scaleX, scaleY)
 
-  // Lucas-Kanade Optical Flow
+  // Lucas-Kanade 옵티컬 플로우
   Video.calcOpticalFlowPyrLK(
     prevGray, gray, prevPts, nextPts, status, err
   )
 
-  // IQR outlier removal + median flow
+  // IQR 이상치 제거 + 중앙값 플로우
   val (dxList, dyList) = filterOutliersIqr(validDx, validDy)
   return Pair(median(dxList)*scaleX, median(dyList)*scaleY)
 }`
   return (
     <SplitCodeSlide
-      title="Occlusion Handling (Optical Flow)"
-      subtitle="When the hand covers the product, track background motion instead"
+      title="오클루전 처리 (Optical Flow)"
+      subtitle="손이 상품을 가릴 때, 배경 움직임을 대신 추적"
       code={code}
       filename="OpticalFlowTracker.kt"
       language="Kotlin"
       accentColor="accent-orange"
       bullets={[
-        "Triggered when hand overlaps product bounding box (occlusion event)",
-        "Masks out hand + target regions to track only background features",
-        "goodFeaturesToTrack: 80 corner points with quality threshold 0.1",
-        "Lucas-Kanade pyramid: tracks feature displacement frame-to-frame",
-        "IQR-based outlier removal (k=1.5) for robust motion estimation",
-        "Median dx/dy applied to shift bounding box, maintaining lock",
+        "손이 상품 바운딩 박스와 겹칠 때 트리거 (오클루전 이벤트)",
+        "손 + 타겟 영역을 마스킹하여 배경 특징점만 추적",
+        "goodFeaturesToTrack: 품질 임계값 0.1로 80개 코너 포인트 검출",
+        "Lucas-Kanade 피라미드: 프레임 간 특징점 변위 추적",
+        "IQR 기반 이상치 제거 (k=1.5)로 강건한 움직임 추정",
+        "중앙값 dx/dy를 바운딩 박스에 적용하여 고정 유지",
       ]}
     />
   )
 }
 
-/* ─── Slide 19: Coroutines ─── */
+/* ─── Slide 19: 코루틴 ─── */
 function Slide19() {
-  const code = `// HomeFragment.kt - Off-main-thread inference
+  const code = `// HomeFragment.kt - 메인 스레드 외부에서의 추론
 cameraExecutor = Executors.newSingleThreadExecutor()
 
-// CameraX ImageAnalysis on background executor
+// 백그라운드 실행자에서 CameraX ImageAnalysis
 ImageAnalysis.Builder()
   .setResolutionSelector(resolutionSelector)
   .setBackpressureStrategy(STRATEGY_KEEP_ONLY_LATEST)
   .build().also { analysis ->
     analysis.setAnalyzer(cameraExecutor) { imageProxy ->
-      // YOLOX inference (heavy computation)
+      // YOLOX 추론 (무거운 연산)
       val results = runYoloxInference(imageProxy)
 
-      // Switch to Main for UI update
+      // UI 업데이트를 위해 Main으로 전환
       withContext(Dispatchers.Main) {
         overlayView.setDetections(results, w, h)
       }
     }
   }
 
-// Room DB query (IO thread)
+// Room DB 쿼리 (IO 스레드)
 lifecycleScope.launch(Dispatchers.IO) {
   val repo = SearchHistoryRepository(db)
   repo.insert(SearchHistoryItem(...))
 }`
   return (
     <SplitCodeSlide
-      title="Coroutines & Async Architecture"
-      subtitle="Keeping the UI thread free while running dual AI models"
+      title="코루틴 & 비동기 아키텍처"
+      subtitle="이중 AI 모델을 실행하면서 UI 스레드를 자유롭게 유지"
       code={code}
       filename="HomeFragment.kt"
       language="Kotlin"
       accentColor="accent-green"
       bullets={[
-        "SingleThreadExecutor for CameraX ImageAnalysis - serial frame processing",
-        "STRATEGY_KEEP_ONLY_LATEST: drop frames if inference is slow, no backpressure",
-        "Dispatchers.Default for CPU-intensive YOLOX inference",
-        "Dispatchers.IO for Room database and network calls",
-        "Dispatchers.Main for UI updates (overlay, buttons, TTS triggers)",
-        "lifecycleScope ensures coroutines are cancelled on Fragment destroy",
+        "CameraX ImageAnalysis용 SingleThreadExecutor - 직렬 프레임 처리",
+        "STRATEGY_KEEP_ONLY_LATEST: 추론이 느리면 프레임 드롭, 백프레셔 없음",
+        "CPU 집약적 YOLOX 추론을 위한 Dispatchers.Default",
+        "Room 데이터베이스 및 네트워크 호출을 위한 Dispatchers.IO",
+        "UI 업데이트(오버레이, 버튼, TTS 트리거)를 위한 Dispatchers.Main",
+        "lifecycleScope로 Fragment 파괴 시 코루틴 자동 취소 보장",
       ]}
     />
   )
 }
 
-/* ─── Slide 20: Synonym API ─── */
+/* ─── Slide 20: 유의어 API ─── */
 function Slide20() {
   const code = `// SynonymApi.kt (Retrofit)
 interface SynonymApi {
@@ -732,30 +732,30 @@ interface SynonymApi {
     : ProductProximityResponse
 }
 
-// Server: Node.js + MongoDB + e5-small
-// User says "Coke" -> vector search finds
-// closest match: "coca_cola" (classId)
+// 서버: Node.js + MongoDB + e5-small
+// 사용자가 "콜라" -> 벡터 검색으로
+// 가장 가까운 매칭: "coca_cola" (classId)
 //
-// Flow:
+// 플로우:
 // STT("콜라") -> SynonymRepository
 //   .findClassByProximity("콜라")
-//   -> "coca_cola" (class label)
-//   -> YOLOX target filter`
+//   -> "coca_cola" (클래스 레이블)
+//   -> YOLOX 타겟 필터`
   return (
     <SplitCodeSlide
-      title="Search & Synonym System"
-      subtitle="Mapping spoken language to YOLOX class IDs via vector similarity"
+      title="검색 & 유의어 시스템"
+      subtitle="벡터 유사도를 활용하여 자연어를 YOLOX 클래스 ID로 매핑"
       code={code}
       filename="SynonymApi.kt"
       language="Kotlin"
       accentColor="primary"
       bullets={[
-        "User speaks natural language (e.g., 'Coke', 'cola', 'coca-cola')",
-        "SynonymRepository loads proximity word mappings at app startup",
-        "Server uses e5-small embeddings for semantic vector search",
-        "MongoDB stores product-to-synonym mappings with embeddings",
-        "Fallback: local ProductDictionary.json for offline matching",
-        "Result: spoken word -> YOLOX class label for targeted detection",
+        "사용자가 자연어로 발화 (예: '콜라', '코카콜라', '사이다')",
+        "SynonymRepository가 앱 시작 시 근접 단어 매핑을 로드",
+        "서버에서 e5-small 임베딩으로 의미 벡터 검색 수행",
+        "MongoDB에 임베딩과 함께 상품-유의어 매핑 저장",
+        "폴백: 오프라인 매칭을 위한 로컬 ProductDictionary.json",
+        "결과: 자연어 발화 -> YOLOX 클래스 레이블로 타겟 탐지",
       ]}
     />
   )
@@ -791,37 +791,37 @@ interface SearchHistoryDao {
 }`
   return (
     <SplitCodeSlide
-      title="Local Data: Room DB + FTS"
-      subtitle="Instant access to recent and frequently searched products"
+      title="로컬 데이터: Room DB + FTS"
+      subtitle="최근 및 자주 검색한 상품에 즉시 접근"
       code={code}
       filename="SearchHistoryDao.kt"
       language="Kotlin"
       accentColor="accent-green"
       bullets={[
-        "Room DB with SearchHistoryItem entity (query, classLabel, timestamp, source)",
-        "Recent searches: ordered by timestamp, LIMIT 100",
-        "Frequent searches: GROUP BY classLabel, COUNT(*) for popularity ranking",
-        "Flow<List> provides reactive updates to UI (Compose/LiveData bridge)",
-        "One-tap re-search: selecting a history item skips voice input entirely",
-        "Data stored locally - no server dependency for history features",
+        "SearchHistoryItem 엔티티의 Room DB (쿼리, classLabel, 타임스탬프, 출처)",
+        "최근 검색: 타임스탬프 기준 정렬, LIMIT 100",
+        "자주 검색: classLabel별 GROUP BY, COUNT(*)로 인기도 순위",
+        "Flow<List>로 UI에 반응형 업데이트 제공 (Compose/LiveData 브릿지)",
+        "원터치 재검색: 히스토리 항목 선택 시 음성 입력 과정을 완전 생략",
+        "데이터는 로컬에 저장 - 히스토리 기능에 서버 의존성 없음",
       ]}
     />
   )
 }
 
-/* ─── Slide 22: Issue 1 - Model Compatibility ─── */
+/* ─── Slide 22: 이슈 1 - 모델 호환성 ─── */
 function Slide22() {
   return (
-    <ContentSlide title="Troubleshooting #1: Model Compatibility" subtitle="TensorFlow Lite 16KB page size error">
+    <ContentSlide title="트러블슈팅 #1: 모델 호환성" subtitle="TensorFlow Lite 16KB 페이지 크기 오류">
       <div className="grid grid-cols-2 gap-6 h-full items-start mt-2">
         <div className="flex flex-col gap-4">
           <div className="bg-accent-orange/5 rounded-xl p-5 border border-accent-orange/20">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="w-5 h-5 text-accent-orange" />
-              <h3 className="text-lg font-semibold text-accent-orange">Problem</h3>
+              <h3 className="text-lg font-semibold text-accent-orange">{'문제'}</h3>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              TFLite model crashed on Android 15 devices with a FlatBuffers page alignment error. The 16KB page size introduced in Android 15 was incompatible with older TFLite runtime.
+              {'TFLite 모델이 Android 15 기기에서 FlatBuffers 페이지 정렬 오류로 크래시되었습니다. Android 15에서 도입된 16KB 페이지 크기가 기존 TFLite 런타임과 호환되지 않았습니다.'}
             </p>
             <div className="mt-3 bg-code-bg rounded-lg p-3">
               <code className="text-xs text-code-foreground font-mono">
@@ -834,13 +834,13 @@ function Slide22() {
           <div className="bg-accent-green/5 rounded-xl p-5 border border-accent-green/20">
             <div className="flex items-center gap-2 mb-3">
               <CheckCircle className="w-5 h-5 text-accent-green" />
-              <h3 className="text-lg font-semibold text-accent-green">Solution</h3>
+              <h3 className="text-lg font-semibold text-accent-green">{'해결'}</h3>
             </div>
             <BulletList items={[
-              "Upgraded from TensorFlow Lite to Google's new LiteRT runtime",
-              "LiteRT handles 16KB page alignment internally",
-              "Updated FlatBuffers serialization to latest spec",
-              "Verified on Android 14 and 15 devices",
+              "TensorFlow Lite에서 Google의 새로운 LiteRT 런타임으로 업그레이드",
+              "LiteRT가 16KB 페이지 정렬을 내부적으로 처리",
+              "FlatBuffers 직렬화를 최신 스펙으로 업데이트",
+              "Android 14 및 15 기기에서 검증 완료",
             ]} color="accent-green" />
           </div>
         </div>
@@ -849,9 +849,9 @@ function Slide22() {
   )
 }
 
-/* ─── Slide 23: Issue 2 - Distance Estimation ─── */
+/* ─── Slide 23: 이슈 2 - 거리 추정 ─── */
 function Slide23() {
-  const code = `// HomeFragment.kt - Pinhole Camera Model
+  const code = `// HomeFragment.kt - 핀홀 카메라 모델
 private fun computeDistanceMm(
   boxWidthPx: Float,
   imageHeight: Int,
@@ -867,55 +867,55 @@ private fun computeDistanceMm(
   val physicalWidthMm =
     ProductDictionary.getPhysicalWidthMm(label)
 
-  // Distance = Focal * RealWidth / PixelWidth
+  // 거리 = 초점거리 * 실제너비 / 픽셀너비
   val rawDistanceMm =
     (focalLengthPx * physicalWidthMm) / realPixelWidth
   return rawDistanceMm * DISTANCE_CALIBRATION_FACTOR
 }`
   return (
     <SplitCodeSlide
-      title="Troubleshooting #2: Distance Estimation"
-      subtitle="ARCore failed at close range - solved with Pinhole Camera Model"
+      title="트러블슈팅 #2: 거리 추정"
+      subtitle="ARCore가 근거리에서 실패 - 핀홀 카메라 모델로 해결"
       code={code}
       filename="HomeFragment.kt"
       language="Kotlin"
       accentColor="accent-orange"
       bullets={[
-        "ARCore depth API failed at < 50cm range (too close for structured light)",
-        "Solution: classic Pinhole Camera Model formula",
-        "Distance = FocalLength x PhysicalWidth / PixelWidth",
-        "ProductDictionary provides real-world dimensions (mm) per class",
-        "FOCAL_LENGTH_FACTOR (1.1) calibrated per device FOV",
-        "DISTANCE_CALIBRATION_FACTOR (1.5) compensates for 2D projection error",
+        "ARCore 깊이 API가 50cm 미만 거리에서 실패 (구조광 방식의 한계)",
+        "해결책: 고전적인 핀홀 카메라 모델 공식 적용",
+        "거리 = 초점거리 x 실제 너비 / 픽셀 너비",
+        "ProductDictionary가 클래스별 실제 치수(mm) 제공",
+        "FOCAL_LENGTH_FACTOR (1.1) 기기 FOV별 보정",
+        "DISTANCE_CALIBRATION_FACTOR (1.5) 2D 투영 오차 보정",
       ]}
     />
   )
 }
 
-/* ─── Slide 24: Limitations ─── */
+/* ─── Slide 24: 한계점 ─── */
 function Slide24() {
   return (
-    <ContentSlide title="Technical Limitations" subtitle="Current hurdles and honest assessment">
+    <ContentSlide title="기술적 한계점" subtitle="현재의 허들과 솔직한 평가">
       <div className="grid grid-cols-3 gap-6 mt-2">
         <div className="bg-card rounded-xl p-5 border border-border border-t-4 border-t-accent-orange">
           <AlertTriangle className="w-8 h-8 text-accent-orange mb-3" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">Heat & Battery</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-2">{'발열 & 배터리'}</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Running 2 AI models (YOLOX + MediaPipe) plus CameraX simultaneously causes significant heat generation and battery drain. Sustained use limited to ~15-20 minutes.
+            {'2개의 AI 모델(YOLOX + MediaPipe)과 CameraX를 동시에 실행하면 상당한 발열과 배터리 소모가 발생합니다. 지속 사용은 약 15-20분으로 제한됩니다.'}
           </p>
         </div>
         <div className="bg-card rounded-xl p-5 border border-border border-t-4 border-t-accent-orange">
           <Activity className="w-8 h-8 text-accent-orange mb-3" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">Depth Accuracy</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-2">{'깊이 정확도'}</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            2D camera cannot accurately estimate depth from side angles. Pinhole model assumes frontal view - oblique angles introduce significant distance errors.
+            {'2D 카메라로는 측면 각도에서 깊이를 정확히 추정할 수 없습니다. 핀홀 모델은 정면 뷰를 가정하며, 비스듬한 각도에서는 상당한 거리 오차가 발생합니다.'}
           </p>
         </div>
         <div className="bg-card rounded-xl p-5 border border-border border-t-4 border-t-accent-orange">
           <Hand className="w-8 h-8 text-accent-orange mb-3" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">Touch Judgment</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-2">{'터치 판정'}</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Without 3D depth sensing, determining physical contact between hand and product relies on 2D bounding box overlap - not true spatial intersection.
+            {'3D 깊이 센서 없이는 손과 상품의 물리적 접촉 판단이 2D 바운딩 박스 겹침에 의존하며, 실제 공간 교차점이 아닙니다.'}
           </p>
         </div>
       </div>
@@ -923,36 +923,36 @@ function Slide24() {
   )
 }
 
-/* ─── Slide 25: Differentiation & Roadmap ─── */
+/* ─── Slide 25: 차별점 & 로드맵 ─── */
 function Slide25() {
   return (
-    <ContentSlide title="Differentiation & Future Roadmap">
+    <ContentSlide title="차별점 & 향후 로드맵">
       <div className="flex flex-col gap-6 mt-2">
         <ComparisonTable
-          headers={["Feature", "GrabIT", "Sullivan+"]}
+          headers={["기능", "GrabIT", "Sullivan+"]}
           rows={[
-            ["Guidance Mode", "Active (hand guidance)", "Passive (text reading)"],
-            ["Processing", "On-device (zero latency)", "Server-based (latency)"],
-            ["Cost", "Free & Open Source", "Subscription model"],
-            ["Hand Detection", "MediaPipe real-time", "Not available"],
-            ["Offline Mode", "Full functionality", "Requires internet"],
+            ["안내 방식", "능동적 (손 안내)", "수동적 (텍스트 읽기)"],
+            ["처리 방식", "온디바이스 (지연 없음)", "서버 기반 (지연 발생)"],
+            ["비용", "무료 & 오픈소스", "구독 모델"],
+            ["손 감지", "MediaPipe 실시간", "미지원"],
+            ["오프라인 모드", "전체 기능 사용 가능", "인터넷 필요"],
           ]}
         />
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-primary/5 rounded-xl p-5 border border-primary/20">
             <Layers className="w-6 h-6 text-primary mb-2" />
-            <h3 className="text-base font-semibold text-foreground mb-2">Hardware</h3>
-            <p className="text-sm text-muted-foreground">Smart Glasses integration for hands-free shopping experience</p>
+            <h3 className="text-base font-semibold text-foreground mb-2">{'하드웨어'}</h3>
+            <p className="text-sm text-muted-foreground">{'핸즈프리 쇼핑 경험을 위한 스마트 글래스 통합'}</p>
           </div>
           <div className="bg-accent-orange/5 rounded-xl p-5 border border-accent-orange/20">
             <Zap className="w-6 h-6 text-accent-orange mb-2" />
-            <h3 className="text-base font-semibold text-foreground mb-2">Software</h3>
-            <p className="text-sm text-muted-foreground">Advanced ARCore with LiDAR for precise 3D depth estimation</p>
+            <h3 className="text-base font-semibold text-foreground mb-2">{'소프트웨어'}</h3>
+            <p className="text-sm text-muted-foreground">{'정밀 3D 깊이 추정을 위한 고급 ARCore + LiDAR'}</p>
           </div>
           <div className="bg-accent-green/5 rounded-xl p-5 border border-accent-green/20">
             <Search className="w-6 h-6 text-accent-green mb-2" />
-            <h3 className="text-base font-semibold text-foreground mb-2">Feature</h3>
-            <p className="text-sm text-muted-foreground">OCR for reading nutrition facts after grasping the product</p>
+            <h3 className="text-base font-semibold text-foreground mb-2">{'기능'}</h3>
+            <p className="text-sm text-muted-foreground">{'상품 파지 후 영양 성분표 읽기를 위한 OCR'}</p>
           </div>
         </div>
       </div>
@@ -960,31 +960,31 @@ function Slide25() {
   )
 }
 
-/* ─── Export all slides ─── */
+/* ─── 전체 슬라이드 내보내기 ─── */
 export const slides: { component: () => React.ReactNode; title: string; section: string }[] = [
-  { component: Slide1, title: "Title", section: "Intro" },
-  { component: Slide2, title: "UX Demo", section: "Intro" },
-  { component: Slide3, title: "Background & Problem", section: "Intro" },
-  { component: Slide4, title: "Core Solution", section: "Intro" },
-  { component: Slide5, title: "Table of Contents", section: "Intro" },
-  { component: Slide6, title: "Team", section: "Part 1" },
-  { component: Slide7, title: "Architecture", section: "Part 2" },
-  { component: Slide8, title: "Tech Stack", section: "Part 2" },
-  { component: Slide9, title: "User Journey", section: "Part 3" },
-  { component: Slide10, title: "Demo Video", section: "Part 3" },
-  { component: Slide11, title: "Live Demo", section: "Part 3" },
-  { component: Slide12, title: "VUI & Haptics", section: "Part 4" },
+  { component: Slide1, title: "타이틀", section: "인트로" },
+  { component: Slide2, title: "UX 데모", section: "인트로" },
+  { component: Slide3, title: "배경 & 문제점", section: "인트로" },
+  { component: Slide4, title: "핵심 솔루션", section: "인트로" },
+  { component: Slide5, title: "목차", section: "인트로" },
+  { component: Slide6, title: "팀 소개", section: "Part 1" },
+  { component: Slide7, title: "아키텍처", section: "Part 2" },
+  { component: Slide8, title: "기술 스택", section: "Part 2" },
+  { component: Slide9, title: "사용자 여정", section: "Part 3" },
+  { component: Slide10, title: "데모 영상", section: "Part 3" },
+  { component: Slide11, title: "라이브 데모", section: "Part 3" },
+  { component: Slide12, title: "VUI & 햅틱", section: "Part 4" },
   { component: Slide13, title: "BeepPlayer", section: "Part 4" },
-  { component: Slide14, title: "YOLOX Detection", section: "Part 4" },
-  { component: Slide15, title: "LiteRT & Optimization", section: "Part 4" },
+  { component: Slide14, title: "YOLOX 탐지", section: "Part 4" },
+  { component: Slide15, title: "LiteRT & 최적화", section: "Part 4" },
   { component: Slide16, title: "CameraX + MediaPipe", section: "Part 4" },
-  { component: Slide17, title: "Gyro Stabilization", section: "Part 4" },
-  { component: Slide18, title: "Optical Flow", section: "Part 4" },
-  { component: Slide19, title: "Coroutines", section: "Part 4" },
-  { component: Slide20, title: "Synonym Search", section: "Part 4" },
+  { component: Slide17, title: "자이로 안정화", section: "Part 4" },
+  { component: Slide18, title: "옵티컬 플로우", section: "Part 4" },
+  { component: Slide19, title: "코루틴", section: "Part 4" },
+  { component: Slide20, title: "유의어 검색", section: "Part 4" },
   { component: Slide21, title: "Room DB & FTS", section: "Part 4" },
-  { component: Slide22, title: "Issue: Model Compat", section: "Part 5" },
-  { component: Slide23, title: "Issue: Distance", section: "Part 5" },
-  { component: Slide24, title: "Limitations", section: "Part 6" },
-  { component: Slide25, title: "Conclusion & Roadmap", section: "Part 7" },
+  { component: Slide22, title: "이슈: 모델 호환", section: "Part 5" },
+  { component: Slide23, title: "이슈: 거리 추정", section: "Part 5" },
+  { component: Slide24, title: "한계점", section: "Part 6" },
+  { component: Slide25, title: "결론 & 로드맵", section: "Part 7" },
 ]
