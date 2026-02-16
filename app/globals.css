@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #FFFFFF;
+  --color-foreground: #0F172A;
+  --color-muted: #F1F5F9;
+  --color-muted-foreground: #64748B;
+  --color-primary: #1E3A5F;
+  --color-primary-foreground: #FFFFFF;
+  --color-accent-orange: #F97316;
+  --color-accent-green: #10B981;
+  --color-accent-blue: #1E3A5F;
+  --color-border: #E2E8F0;
+  --color-card: #F8FAFC;
+  --color-card-foreground: #0F172A;
+  --color-code-bg: #1E293B;
+  --color-code-foreground: #E2E8F0;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+}
+
+/* Code syntax highlighting */
+.code-keyword { color: #C084FC; }
+.code-string { color: #34D399; }
+.code-number { color: #F59E0B; }
+.code-comment { color: #64748B; font-style: italic; }
+.code-type { color: #38BDF8; }
+.code-function { color: #FBBF24; }
+.code-annotation { color: #FB923C; }
+.code-param { color: #E2E8F0; }
+
+/* Slide transitions */
+.slide-enter {
+  animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-fade-in {
+  animation: fadeIn 0.6s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Staggered animations */
+.stagger-1 { animation-delay: 0.1s; opacity: 0; }
+.stagger-2 { animation-delay: 0.2s; opacity: 0; }
+.stagger-3 { animation-delay: 0.3s; opacity: 0; }
+.stagger-4 { animation-delay: 0.4s; opacity: 0; }
+.stagger-5 { animation-delay: 0.5s; opacity: 0; }
+
+/* Progress bar */
+.progress-bar {
+  transition: width 0.3s ease-out;
+}
+
+/* Scrollbar for code blocks */
+.code-scroll::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+.code-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.code-scroll::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 2px;
+}
