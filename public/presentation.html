@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GrabIT - 시각장애인을 위한 실시간 쇼핑 보조 어플리케이션</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #FFFFFF;
+  --fg: #0F172A;
+  --muted: #F1F5F9;
+  --muted-fg: #64748B;
+  --border: #E2E8F0;
+  --primary: #1E3A5F;
+  --primary-fg: #FFFFFF;
+  --orange: #E86C28;
+  --green: #059669;
+  --code-bg: #1E293B;
+  --code-fg: #E2E8F0;
+  --card: #FFFFFF;
+  --radius: 12px;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--fg); overflow:hidden; height:100vh; -webkit-font-smoothing:antialiased; }
+code, pre, .mono { font-family:'JetBrains Mono',monospace; }
+
+/* Layout */
+.app { display:flex; flex-direction:column; height:100vh; width:100vw; }
+.progress-bar { height:4px; background:var(--muted); flex-shrink:0; }
+.progress-fill { height:100%; background:var(--primary); transition:width .3s ease; }
+.slide-area { flex:1; min-height:0; position:relative; overflow:hidden; }
+.slide { display:none; height:100%; padding:48px 64px; animation:fadeIn .35s ease; }
+.slide.active { display:flex; flex-direction:column; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.bottom-bar { flex-shrink:0; border-top:1px solid var(--border); background:var(--bg); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; }
+.nav-btn { background:none; border:none; cursor:pointer; padding:8px; border-radius:8px; color:var(--fg); transition:background .15s; display:flex; align-items:center; justify-content:center; }
+.nav-btn:hover { background:var(--muted); }
+.nav-btn:disabled { opacity:.3; cursor:not-allowed; }
+.nav-btn svg { width:20px; height:20px; }
+
+/* Slide types */
+.slide-title-center { align-items:center; justify-content:center; text-align:center; }
+.slide-title-center h1 { font-size:2.8rem; font-weight:800; line-height:1.2; color:var(--fg); margin-bottom:12px; text-wrap:balance; }
+.slide-title-center .subtitle { font-size:1.15rem; color:var(--muted-fg); max-width:680px; line-height:1.6; }
+.badge { display:inline-block; background:var(--primary); color:var(--primary-fg); font-size:.75rem; font-weight:600; padding:4px 14px; border-radius:999px; margin-bottom:16px; letter-spacing:.02em; }
+.tags { display:flex; gap:16px; margin-top:20px; }
+.tag { display:flex; align-items:center; gap:8px; padding:8px 16px; border-radius:8px; font-size:.85rem; font-weight:500; }
+.tag.blue { background:rgba(30,58,95,.1); color:var(--primary); }
+.tag.orange { background:rgba(232,108,40,.1); color:var(--orange); }
+.tag.green { background:rgba(5,150,105,.1); color:var(--green); }
+
+/* Content slide */
+.content-slide { gap:8px; }
+.content-slide > h2 { font-size:1.75rem; font-weight:700; color:var(--fg); }
+.content-slide > .sub { font-size:.95rem; color:var(--muted-fg); margin-bottom:8px; }
+.content-body { flex:1; min-height:0; }
+
+/* Cards, grids */
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; }
+.grid-5 { display:grid; grid-template-columns:repeat(5,1fr); gap:16px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
+.card-t-blue { border-top:4px solid var(--primary); }
+.card-t-orange { border-top:4px solid var(--orange); }
+.card-t-green { border-top:4px solid var(--green); }
+.card-l-orange { border-left:4px solid var(--orange); }
+.card-center { text-align:center; display:flex; flex-direction:column; align-items:center; }
+
+/* Stat card */
+.stat { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center; }
+.stat .val { font-size:1.5rem; font-weight:700; }
+.stat .lbl { font-size:.75rem; color:var(--muted-fg); margin-top:4px; }
+.val.blue { color:var(--primary); }
+.val.orange { color:var(--orange); }
+.val.green { color:var(--green); }
+
+/* Bullet list */
+.bullets { display:flex; flex-direction:column; gap:8px; }
+.bullet { display:flex; align-items:flex-start; gap:10px; font-size:.9rem; color:var(--fg); line-height:1.5; }
+.bullet::before { content:''; width:7px; height:7px; border-radius:50%; margin-top:7px; flex-shrink:0; }
+.bullet.blue::before { background:var(--primary); }
+.bullet.orange::before { background:var(--orange); }
+.bullet.green::before { background:var(--green); }
+
+/* Flow chart */
+.flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; }
+.flow-step { padding:10px 18px; border-radius:8px; text-align:center; font-size:.85rem; font-weight:600; color:var(--primary-fg); }
+.flow-step.blue { background:var(--primary); }
+.flow-step.orange { background:var(--orange); }
+.flow-step.green { background:var(--green); }
+.flow-step.muted { background:var(--muted); color:var(--fg); }
+.flow-step small { display:block; font-size:.7rem; font-weight:400; opacity:.85; margin-top:2px; }
+.flow-arrow { color:var(--muted-fg); font-size:1.2rem; }
+
+/* Split layout */
+.split { display:grid; grid-template-columns:1fr 1fr; gap:32px; height:100%; }
+.split-left { overflow:auto; }
+
+/* Code block */
+.code-wrap { background:var(--code-bg); border-radius:var(--radius); border:1px solid rgba(255,255,255,.08); overflow:hidden; }
+.code-header { display:flex; align-items:center; gap:6px; padding:10px 16px; border-bottom:1px solid rgba(255,255,255,.08); }
+.code-dot { width:10px; height:10px; border-radius:50%; }
+.code-dot.r { background:#EF4444; }
+.code-dot.y { background:#F59E0B; }
+.code-dot.g { background:#22C55E; }
+.code-filename { margin-left:8px; font-size:.75rem; color:var(--code-fg); opacity:.6; }
+.code-lang { margin-left:auto; font-size:.7rem; color:var(--code-fg); opacity:.4; }
+pre.code { padding:16px; font-size:.78rem; line-height:1.65; color:var(--code-fg); overflow-x:auto; white-space:pre; tab-size:2; }
+
+/* Comparison table */
+table.compare { width:100%; border-collapse:collapse; font-size:.9rem; }
+table.compare th { background:var(--primary); color:var(--primary-fg); padding:10px 16px; text-align:left; font-weight:600; }
+table.compare th:first-child { border-radius:8px 0 0 0; }
+table.compare th:last-child { border-radius:0 8px 0 0; }
+table.compare td { padding:10px 16px; border-bottom:1px solid var(--border); }
+table.compare tr:nth-child(even) td { background:var(--muted); }
+
+/* Error / success highlight boxes */
+.highlight-box { border-radius:var(--radius); padding:20px; }
+.highlight-box.orange { background:rgba(232,108,40,.05); border:1px solid rgba(232,108,40,.2); }
+.highlight-box.green { background:rgba(5,150,105,.05); border:1px solid rgba(5,150,105,.2); }
+.highlight-box.blue { background:rgba(30,58,95,.05); border:1px solid rgba(30,58,95,.2); }
+.highlight-box h3 { display:flex; align-items:center; gap:8px; font-size:1.1rem; font-weight:600; margin-bottom:10px; }
+.highlight-box h3.orange { color:var(--orange); }
+.highlight-box h3.green { color:var(--green); }
+.highlight-box h3.blue { color:var(--primary); }
+.err-code { background:var(--code-bg); border-radius:8px; padding:12px; margin-top:10px; }
+.err-code code { font-size:.75rem; color:var(--code-fg); }
+
+/* Section slide */
+.section-slide { align-items:center; justify-content:center; text-align:center; background:var(--primary); color:var(--primary-fg); margin:-48px -64px; padding:48px 64px; }
+.section-slide h2 { font-size:2.5rem; font-weight:800; }
+.section-slide p { font-size:1.1rem; opacity:.8; margin-top:8px; }
+
+/* Icon circles */
+.icon-circle { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.3rem; }
+.icon-circle.blue { background:rgba(30,58,95,.1); color:var(--primary); }
+.icon-circle.orange { background:rgba(232,108,40,.1); color:var(--orange); }
+.icon-circle.green { background:rgba(5,150,105,.1); color:var(--green); }
+.icon-circle-lg { width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.5rem; margin-bottom:12px; }
+
+/* Chips */
+.chip { display:inline-block; padding:2px 10px; border-radius:999px; font-size:.75rem; background:var(--muted); color:var(--muted-fg); }
+
+/* Pipeline conversion boxes */
+.convert-flow { display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; }
+.convert-box { text-align:center; padding:16px 24px; border-radius:var(--radius); border:1px solid var(--border); background:var(--card); }
+.convert-box .ext { font-size:.85rem; color:var(--muted-fg); }
+.convert-box .size { font-size:1.5rem; font-weight:700; color:var(--fg); }
+.convert-box .desc { font-size:.75rem; color:var(--muted-fg); }
+.convert-box.highlight { background:rgba(5,150,105,.1); border-color:rgba(5,150,105,.3); }
+.convert-box.highlight .ext { color:var(--green); }
+.convert-box.highlight .size { color:var(--green); }
+.convert-arrow { display:flex; flex-direction:column; align-items:center; gap:2px; color:var(--orange); font-size:.75rem; font-weight:600; }
+
+/* Placeholder */
+.video-placeholder { width:100%; max-width:700px; aspect-ratio:16/9; background:var(--code-bg); border-radius:var(--radius); border:1px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; margin:0 auto; }
+.play-circle { width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.play-circle.orange { background:rgba(232,108,40,.2); color:var(--orange); }
+.play-circle.blue { background:rgba(30,58,95,.2); color:var(--primary); }
+
+/* Overview */
+.overview { height:100%; overflow-y:auto; padding:24px; display:none; animation:fadeIn .2s ease; }
+.overview.active { display:block; }
+.overview h2 { font-size:1.5rem; font-weight:700; margin-bottom:16px; }
+.overview-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+.overview-item { text-align:left; padding:12px; border-radius:8px; border:1px solid var(--border); background:var(--card); cursor:pointer; transition:all .15s; }
+.overview-item:hover { border-color:var(--primary); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.overview-item.current { border-color:var(--primary); background:rgba(30,58,95,.05); }
+.overview-item .sec { font-size:.7rem; color:var(--muted-fg); }
+.overview-item .ttl { font-size:.85rem; font-weight:500; color:var(--fg); margin-top:2px; }
+.overview-item .num { font-size:.7rem; color:var(--muted-fg); margin-top:4px; }
+
+/* Toc */
+.toc-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; max-width:700px; margin:16px auto 0; }
+.toc-item { display:flex; align-items:center; gap:14px; padding:14px; background:var(--card); border:1px solid var(--border); border-radius:8px; }
+.toc-num { width:40px; height:40px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:.85rem; font-weight:700; color:var(--primary-fg); }
+.toc-num.blue { background:var(--primary); }
+.toc-num.orange { background:var(--orange); }
+.toc-num.green { background:var(--green); }
+.toc-label { font-size:1.05rem; font-weight:500; }
+
+/* Check list */
+.check-list { display:flex; flex-direction:column; gap:8px; }
+.check-item { display:flex; align-items:center; gap:8px; font-size:.9rem; }
+.check-dot { width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.6rem; color:white; flex-shrink:0; }
+.check-dot.blue { background:var(--primary); }
+.check-dot.orange { background:var(--orange); }
+.check-dot.green { background:var(--green); }
+
+/* 3col pipeline */
+.pipeline-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center; }
+
+/* phone card */
+.phone-card { display:flex; flex-direction:column; align-items:center; gap:12px; width:240px; }
+.phone-icon { font-size:3rem; }
+
+/* Roadmap */
+.roadmap-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+.roadmap-card { border-radius:var(--radius); padding:20px; }
+.roadmap-card h4 { font-size:1rem; font-weight:600; margin-top:8px; margin-bottom:6px; }
+.roadmap-card p { font-size:.85rem; color:var(--muted-fg); line-height:1.5; }
+
+/* Gap helpers */
+.gap-4 { gap:16px; } .gap-6 { gap:24px; } .gap-8 { gap:32px; }
+.mt-2 { margin-top:8px; } .mt-4 { margin-top:16px; } .mt-6 { margin-top:24px; }
+.mb-2 { margin-bottom:8px; } .mb-3 { margin-bottom:12px; }
+.text-sm { font-size:.9rem; } .text-xs { font-size:.75rem; }
+.text-muted { color:var(--muted-fg); }
+.leading-relaxed { line-height:1.6; }
+.flex-1 { flex:1; }
+.flex { display:flex; }
+.flex-col { flex-direction:column; }
+.items-center { align-items:center; }
+.items-start { align-items:flex-start; }
+.justify-center { justify-content:center; }
+.justify-between { justify-content:space-between; }
+.text-center { text-align:center; }
+.w-full { width:100%; }
+.h-full { height:100%; }
+.shrink-0 { flex-shrink:0; }
+
+/* Big quote */
+.big-quote { font-size:1.25rem; font-weight:700; color:var(--orange); margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+  <div class="slide-area" id="slideArea">
+
+    <!-- OVERVIEW (hidden by default) -->
+    <div class="overview" id="overview"></div>
+
+    <!-- ===== SLIDE 1: 타이틀 ===== -->
+    <div class="slide slide-title-center" data-title="타이틀" data-section="인트로">
+      <span class="badge">KDT 파이널 프로젝트</span>
+      <h1>GrabIT: 실시간 쇼핑 보조<br>어플리케이션</h1>
+      <p class="subtitle">온디바이스 AI로 시각장애인의 손을 상품까지 안내하는 음성 &amp; 촉각 가이드</p>
+      <div class="tags">
+        <span class="tag blue">Vision AI</span>
+        <span class="tag orange">음성 가이드</span>
+        <span class="tag green">온디바이스</span>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 2: UX 영상 ===== -->
+    <div class="slide content-slide" data-title="UX 데모" data-section="인트로">
+      <h2>사용자 경험 데모</h2>
+      <p class="sub">1분 영상: 안대를 착용한 사용자가 편의점에서 음료를 찾는 과정</p>
+      <div class="content-body flex items-center justify-center">
+        <div class="video-placeholder">
+          <div class="play-circle orange"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg></div>
+          <p class="text-sm text-muted">영상 플레이스홀더 - UX 데모</p>
+          <p class="text-xs text-muted" style="opacity:.6">발표 시 재생해주세요</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 3: 배경 & 문제 ===== -->
+    <div class="slide content-slide" data-title="배경 & 문제점" data-section="인트로">
+      <h2>배경 &amp; 문제점</h2>
+      <p class="sub">기존 솔루션이 장보기에서 부족한 이유</p>
+      <div class="content-body grid-2 items-center" style="align-items:center">
+        <div class="flex flex-col gap-4">
+          <div class="card card-l-orange">
+            <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">접근성의 빈틈</h3>
+            <p class="text-sm text-muted leading-relaxed">Sullivan+ 같은 기존 OCR 앱은 텍스트를 읽을 수 있지만, 사용자의 손을 진열대 위 상품의 물리적 위치까지 안내하지는 못합니다.</p>
+          </div>
+          <div class="card">
+            <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">현실적 영향</h3>
+            <p class="text-sm text-muted leading-relaxed">전 세계 2억 5,200만 명의 시각장애인은 단순한 텍스트 읽기가 아니라, 독립적으로 쇼핑하기 위한 능동적 안내가 필요합니다.</p>
+          </div>
+        </div>
+        <div class="flex flex-col gap-4">
+          <div class="highlight-box orange">
+            <p class="big-quote">"뭐라고 써있는지는 알겠는데, 어디에 있는 거야?"</p>
+            <p class="text-sm text-muted">핵심 문제: 탐지만 하고 위치를 알려주지 않는 것은 불완전한 보조입니다.</p>
+          </div>
+          <div style="display:flex;gap:16px">
+            <div class="stat" style="flex:1"><div class="val blue">2.52억</div><div class="lbl">시각장애인 수 (WHO)</div></div>
+            <div class="stat" style="flex:1"><div class="val orange">0개</div><div class="lbl">손 안내 기능이 있는 앱</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 4: 핵심 솔루션 ===== -->
+    <div class="slide content-slide" data-title="핵심 솔루션" data-section="인트로">
+      <h2>핵심 솔루션: 3가지 기둥</h2>
+      <p class="sub">탐지와 물리적 안내 사이의 격차를 GrabIT이 어떻게 해소하는가</p>
+      <div class="content-body grid-3 mt-4">
+        <div class="card card-t-blue card-center">
+          <div class="icon-circle-lg" style="background:rgba(30,58,95,.1);color:var(--primary)">&#129504;</div>
+          <h3 style="font-size:1.15rem;font-weight:600;margin-bottom:8px">Vision AI</h3>
+          <p class="text-sm text-muted leading-relaxed">YOLOX-Nano가 온디바이스에서 49개 상품 클래스를 실시간 탐지합니다. MediaPipe가 동시에 사용자의 손 위치를 추적합니다.</p>
+        </div>
+        <div class="card card-t-orange card-center">
+          <div class="icon-circle-lg" style="background:rgba(232,108,40,.1);color:var(--orange)">&#128264;</div>
+          <h3 style="font-size:1.15rem;font-weight:600;margin-bottom:8px">음성 가이드</h3>
+          <p class="text-sm text-muted leading-relaxed">사인파 비프음(440-880Hz)으로 방향을 안내합니다. TTS가 상품명, 거리, '왼쪽', '오른쪽' 등의 위치 정보를 음성으로 알려줍니다.</p>
+        </div>
+        <div class="card card-t-green card-center">
+          <div class="icon-circle-lg" style="background:rgba(5,150,105,.1);color:var(--green)">&#128247;</div>
+          <h3 style="font-size:1.15rem;font-weight:600;margin-bottom:8px">온디바이스 처리</h3>
+          <p class="text-sm text-muted leading-relaxed">네트워크 지연 없음. 모든 AI 추론은 TFLite/LiteRT를 통해 로컬에서 실행됩니다. 서버는 상품 검색 시 유의어 조회에만 사용됩니다.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 5: 목차 ===== -->
+    <div class="slide content-slide" data-title="목차" data-section="인트로">
+      <h2>목차</h2>
+      <div class="content-body">
+        <div class="toc-grid">
+          <div class="toc-item"><span class="toc-num blue">01</span><span class="toc-label">팀 소개</span></div>
+          <div class="toc-item"><span class="toc-num blue">02</span><span class="toc-label">아키텍처</span></div>
+          <div class="toc-item"><span class="toc-num orange">03</span><span class="toc-label">시나리오 &amp; 데모</span></div>
+          <div class="toc-item"><span class="toc-num orange">04</span><span class="toc-label">기술 심층 분석</span></div>
+          <div class="toc-item"><span class="toc-num green">05</span><span class="toc-label">트러블슈팅</span></div>
+          <div class="toc-item"><span class="toc-num green">06</span><span class="toc-label">한계점</span></div>
+          <div class="toc-item"><span class="toc-num blue">07</span><span class="toc-label">결론 &amp; 로드맵</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 6: 팀 소개 ===== -->
+    <div class="slide content-slide" data-title="팀 소개" data-section="Part 1">
+      <h2>팀 소개</h2>
+      <p class="sub">3명의 팀원, 상호 보완적 전문성</p>
+      <div class="content-body grid-3 mt-4">
+        <div class="card card-center">
+          <div class="icon-circle-lg" style="background:rgba(30,58,95,.1);color:var(--primary)">&#128101;</div>
+          <h3 style="font-size:1.1rem;font-weight:600">팀원 1</h3>
+          <p class="text-sm" style="color:var(--orange);font-weight:500;margin-bottom:10px">PM / Android 핵심 개발</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">
+            <span class="chip">Kotlin</span><span class="chip">CameraX</span><span class="chip">TFLite</span><span class="chip">Coroutines</span>
+          </div>
+        </div>
+        <div class="card card-center">
+          <div class="icon-circle-lg" style="background:rgba(30,58,95,.1);color:var(--primary)">&#128101;</div>
+          <h3 style="font-size:1.1rem;font-weight:600">팀원 2</h3>
+          <p class="text-sm" style="color:var(--orange);font-weight:500;margin-bottom:10px">AI / 백엔드</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">
+            <span class="chip">YOLOX</span><span class="chip">Python</span><span class="chip">Node.js</span><span class="chip">MongoDB</span>
+          </div>
+        </div>
+        <div class="card card-center">
+          <div class="icon-circle-lg" style="background:rgba(30,58,95,.1);color:var(--primary)">&#128101;</div>
+          <h3 style="font-size:1.1rem;font-weight:600">팀원 3</h3>
+          <p class="text-sm" style="color:var(--orange);font-weight:500;margin-bottom:10px">UI / VUI 설계</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">
+            <span class="chip">Figma</span><span class="chip">TTS/STT</span><span class="chip">접근성</span><span class="chip">UX 리서치</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 7: 시스템 아키텍처 ===== -->
+    <div class="slide content-slide" data-title="아키텍처" data-section="Part 2">
+      <h2>시스템 아키텍처</h2>
+      <p class="sub">최소한의 서버 의존성을 가진 온디바이스 AI 파이프라인</p>
+      <div class="content-body flex flex-col items-center gap-6 mt-2">
+        <div class="flow">
+          <span class="flow-step blue">&#128247; CameraX 입력</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step orange">&#129504; YOLOX + MediaPipe</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step green">&#128264; AudioTrack 출력</span>
+        </div>
+        <p class="text-xs mono text-muted" style="letter-spacing:.05em">모두 온디바이스 (지연 시간 제로)</p>
+        <div style="width:1px;height:32px;background:var(--border)"></div>
+        <div class="flex items-center gap-4">
+          <div class="card flex items-center gap-8" style="padding:12px 20px">&#128421; 유의어 API</div>
+          <span class="text-xs text-muted">(Node.js + MongoDB, 검색 전용)</span>
+        </div>
+        <div class="grid-3 w-full mt-4" style="max-width:700px">
+          <div class="card"><h4 style="font-size:.9rem;font-weight:600;color:var(--primary);margin-bottom:6px">Android</h4><p class="text-xs text-muted">Kotlin, Coroutines, Room DB, CameraX</p></div>
+          <div class="card"><h4 style="font-size:.9rem;font-weight:600;color:var(--orange);margin-bottom:6px">AI</h4><p class="text-xs text-muted">YOLOX-Nano (TFLite), MediaPipe Hands, OpenCV</p></div>
+          <div class="card"><h4 style="font-size:.9rem;font-weight:600;color:var(--green);margin-bottom:6px">서버</h4><p class="text-xs text-muted">Node.js, MongoDB, Python (e5-small 임베딩)</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 8: 기술 스택 ===== -->
+    <div class="slide content-slide" data-title="기술 스택" data-section="Part 2">
+      <h2>기술 스택</h2>
+      <p class="sub">온디바이스 성능과 접근성에 최적화</p>
+      <div class="content-body grid-3 mt-2">
+        <div class="card card-t-blue">
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:12px">&#128241; Android</h3>
+          <div class="check-list">
+            <div class="check-item"><span class="check-dot blue">&#10003;</span>Kotlin 1.9+</div>
+            <div class="check-item"><span class="check-dot blue">&#10003;</span>Coroutines (Dispatchers.Default)</div>
+            <div class="check-item"><span class="check-dot blue">&#10003;</span>Room DB + FTS4</div>
+            <div class="check-item"><span class="check-dot blue">&#10003;</span>CameraX (ImageAnalysis)</div>
+            <div class="check-item"><span class="check-dot blue">&#10003;</span>MediaPipe Tasks Vision</div>
+          </div>
+        </div>
+        <div class="card card-t-orange">
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:12px">&#129504; AI / ML</h3>
+          <div class="check-list">
+            <div class="check-item"><span class="check-dot orange">&#10003;</span>YOLOX-Nano (FP16 TFLite)</div>
+            <div class="check-item"><span class="check-dot orange">&#10003;</span>MediaPipe Hand Landmarker</div>
+            <div class="check-item"><span class="check-dot orange">&#10003;</span>OpenCV Lucas-Kanade</div>
+            <div class="check-item"><span class="check-dot orange">&#10003;</span>Roboflow + MobileSAM3</div>
+            <div class="check-item"><span class="check-dot orange">&#10003;</span>49개 상품 클래스</div>
+          </div>
+        </div>
+        <div class="card card-t-green">
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:12px">&#128421; 서버</h3>
+          <div class="check-list">
+            <div class="check-item"><span class="check-dot green">&#10003;</span>Node.js + Express</div>
+            <div class="check-item"><span class="check-dot green">&#10003;</span>MongoDB Atlas</div>
+            <div class="check-item"><span class="check-dot green">&#10003;</span>Python (e5-small 임베딩)</div>
+            <div class="check-item"><span class="check-dot green">&#10003;</span>벡터 검색 (유의어)</div>
+            <div class="check-item"><span class="check-dot green">&#10003;</span>REST API (인증 없음)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 9: 사용자 여정 ===== -->
+    <div class="slide content-slide" data-title="사용자 여정" data-section="Part 3">
+      <h2>사용자 여정</h2>
+      <p class="sub">앱 시작부터 상품을 손에 쥐기까지</p>
+      <div class="content-body flex flex-col items-center gap-8 mt-4">
+        <div class="flow">
+          <span class="flow-step blue">앱 시작<small>터치 / 볼륨 업</small></span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step blue">음성 입력<small>STT: '콜라'</small></span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step orange">확인<small>TTS + STT</small></span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step orange">탐색<small>YOLOX 스캔</small></span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step green">안내<small>비프 + TTS</small></span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step green">파지<small>손 감지</small></span>
+        </div>
+        <div class="grid-3 w-full" style="max-width:700px;margin-top:16px">
+          <div class="card text-center">
+            <div style="font-size:1.5rem;font-weight:700;color:var(--primary)">1-2단계</div>
+            <div class="text-xs text-muted mt-2">음성 인터랙션</div>
+            <div class="text-xs text-muted">VoiceFlowController 상태 머신</div>
+          </div>
+          <div class="card text-center">
+            <div style="font-size:1.5rem;font-weight:700;color:var(--orange)">3-4단계</div>
+            <div class="text-xs text-muted mt-2">AI 탐지</div>
+            <div class="text-xs text-muted">YOLOX + 자이로 트래킹</div>
+          </div>
+          <div class="card text-center">
+            <div style="font-size:1.5rem;font-weight:700;color:var(--green)">5-6단계</div>
+            <div class="text-xs text-muted mt-2">물리적 안내</div>
+            <div class="text-xs text-muted">비프음 + MediaPipe Hands</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 10: 데모 영상 ===== -->
+    <div class="slide content-slide" data-title="데모 영상" data-section="Part 3">
+      <h2>데모 영상</h2>
+      <p class="sub">GrabIT 실제 작동 영상</p>
+      <div class="content-body flex items-center justify-center">
+        <div class="video-placeholder">
+          <div class="play-circle blue"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg></div>
+          <p class="text-sm text-muted">데모 영상 플레이스홀더</p>
+          <p class="text-xs text-muted" style="opacity:.6">상품 탐지 및 손 안내 전체 과정 워크스루</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 11: 라이브 데모 ===== -->
+    <div class="slide content-slide" data-title="라이브 데모" data-section="Part 3">
+      <h2>라이브 데모</h2>
+      <p class="sub">폰 미러링 및 QR 코드를 통한 청중 체험</p>
+      <div class="content-body flex items-center justify-center gap-8">
+        <div class="card card-center" style="width:240px;padding:32px 24px">
+          <div style="font-size:3rem">&#128241;</div>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-top:8px">폰 미러링</h3>
+          <p class="text-sm text-muted text-center mt-2">scrcpy 또는 Vysor로 프로젝터에 연결</p>
+        </div>
+        <div class="card card-center" style="width:240px;padding:32px 24px">
+          <div style="width:120px;height:120px;background:var(--muted);border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border)"><span class="text-xs text-muted">QR Code</span></div>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-top:12px">APK 다운로드</h3>
+          <p class="text-sm text-muted text-center mt-2">스캔하여 GrabIT을 기기에 설치하세요</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 12: VUI & 햅틱 피드백 ===== -->
+    <div class="slide content-slide" data-title="VUI & 햅틱" data-section="Part 4">
+      <h2>VUI &amp; 햅틱 피드백</h2>
+      <p class="sub">상태 머신(State Machine)이 전체 음성 인터랙션을 제어합니다</p>
+      <div class="content-body split">
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span><span class="code-filename">VoiceFlowController.kt</span><span class="code-lang">Kotlin</span></div>
+          <pre class="code">enum class VoiceFlowState {
+  APP_START,
+  WAITING_PRODUCT_NAME,
+  CONFIRM_PRODUCT,
+  WAITING_CONFIRMATION,
+  SEARCHING_PRODUCT,
+  SEARCH_RESULT,
+  SEARCH_FAILED
+}
+
+// 상태 전환
+private fun transitionTo(state: VoiceFlowState) {
+  currentState = state
+  isNextStepVoiceInput = when (state) {
+    WAITING_PRODUCT_NAME, CONFIRM_PRODUCT -> true
+    else -> false
+  }
+  onStateChanged(state, stateLabel)
+}</pre>
+        </div>
+        <div class="flex flex-col justify-center">
+          <div class="bullets">
+            <div class="bullet orange">7개 상태 FSM: APP_START &rarr; WAITING_PRODUCT_NAME &rarr; CONFIRM &rarr; SEARCHING &rarr; RESULT/FAILED</div>
+            <div class="bullet orange">TTS가 먼저 말하고, 이후 STT가 듣기 시작 - 순차 실행, 겹침 없음</div>
+            <div class="bullet orange">볼륨 업 길게 누르기: 어디서든 음성 입력으로 바로 진입</div>
+            <div class="bullet orange">볼륨 다운 길게 누르기: 현재 TTS를 건너뛰고 즉시 STT 시작</div>
+            <div class="bullet orange">STT 종료 후 4초 '숨쉬기 시간'으로 자동 안내 TTS 억제</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 13: BeepPlayer ===== -->
+    <div class="slide content-slide" data-title="BeepPlayer" data-section="Part 4">
+      <h2>BeepPlayer: 사인파 생성</h2>
+      <p class="sub">AudioTrack을 이용한 지연 없는 음성 피드백</p>
+      <div class="content-body split">
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span><span class="code-filename">BeepPlayer.kt</span><span class="code-lang">Kotlin</span></div>
+          <pre class="code">class BeepPlayer {
+  private const val SAMPLE_RATE = 44100
+  private const val BEEP_FREQ_HZ = 880
+  private const val AMPLITUDE = 0.35
+
+  fun init(): Boolean {
+    val numSamples = (SAMPLE_RATE * BEEP_DURATION_MS
+                      / 1000.0).toInt()
+    val buffer = ShortArray(numSamples)
+    val angularFreq = 2.0 * PI * BEEP_FREQ_HZ
+                      / SAMPLE_RATE
+
+    for (i in 0 until numSamples) {
+      buffer[i] = (AMPLITUDE * sin(angularFreq * i)
+                   * Short.MAX_VALUE).toInt().toShort()
+    }
+
+    audioTrack = AudioTrack.Builder()
+      .setAudioFormat(AudioFormat.Builder()
+        .setEncoding(ENCODING_PCM_16BIT)
+        .setSampleRate(SAMPLE_RATE)
+        .setChannelMask(CHANNEL_OUT_MONO).build())
+      .setTransferMode(AudioTrack.MODE_STATIC)
+      .build()
+    audioTrack?.write(buffer, 0, buffer.size)
+  }
+}</pre>
+        </div>
+        <div class="flex flex-col justify-center">
+          <div class="bullets">
+            <div class="bullet green">880Hz 원시 PCM 16비트 사인파 생성 (거리에 따라 440-880Hz 가변)</div>
+            <div class="bullet green">MODE_STATIC: 전체 파형을 버퍼에 미리 로드하여 즉시 재생</div>
+            <div class="bullet green">MediaPlayer 오버헤드 없음 - AudioTrack API 직접 사용으로 5ms 미만 지연</div>
+            <div class="bullet green">reloadStaticData()로 재할당 없이 반복 재생 가능</div>
+            <div class="bullet green">Handler.postDelayed로 깔끔한 정지 + 콜백 순서 보장</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 14: YOLOX 객체 탐지 ===== -->
+    <div class="slide content-slide" data-title="YOLOX 탐지" data-section="Part 4">
+      <h2>YOLOX 객체 탐지</h2>
+      <p class="sub">모바일 추론에 최적화된 Nano 모델</p>
+      <div class="content-body grid-2">
+        <div class="flex flex-col gap-4">
+          <div class="card">
+            <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="color:var(--orange)">&#129504;</span> 모델 파이프라인</h3>
+            <div class="flow" style="justify-content:flex-start">
+              <span class="flow-step muted">수집<small>5000+장</small></span>
+              <span class="flow-arrow">&rarr;</span>
+              <span class="flow-step muted">라벨링<small>Roboflow</small></span>
+              <span class="flow-arrow">&rarr;</span>
+              <span class="flow-step orange">자동 라벨링<small>MobileSAM3</small></span>
+              <span class="flow-arrow">&rarr;</span>
+              <span class="flow-step blue">학습<small>YOLOX-Nano</small></span>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:10px">학습 세부 사항</h3>
+            <div class="bullets">
+              <div class="bullet orange">YOLOX-Nano 백본 (경량, 모바일 우선 설계)</div>
+              <div class="bullet orange">TFLite 배포를 위한 Float16 양자화</div>
+              <div class="bullet orange">49개 상품 클래스 (음료, 과자, 생활용품)</div>
+              <div class="bullet orange">Roboflow로 어노테이션 + 증강 파이프라인 구축</div>
+              <div class="bullet orange">MobileSAM3로 반자동 마스크 생성</div>
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-col gap-4">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="stat"><div class="val orange">49</div><div class="lbl">상품 클래스</div></div>
+            <div class="stat"><div class="val blue">FP16</div><div class="lbl">양자화</div></div>
+            <div class="stat"><div class="val green">16MB</div><div class="lbl">모델 크기</div></div>
+            <div class="stat"><div class="val orange">~30ms</div><div class="lbl">추론 시간</div></div>
+          </div>
+          <div class="highlight-box orange" style="flex:1">
+            <h3 class="orange" style="font-size:1.1rem;font-weight:600;margin-bottom:8px">왜 YOLOX-Nano인가?</h3>
+            <p class="text-sm text-muted leading-relaxed">앵커 프리 설계로 하이퍼파라미터 튜닝이 불필요합니다. 디커플드 헤드는 작은 객체 탐지 성능을 향상시킵니다. Nano 변형은 모바일 GPU에서 최소한의 정확도 손실로 실시간 추론을 달성합니다.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 15: LiteRT & 최적화 ===== -->
+    <div class="slide content-slide" data-title="LiteRT & 최적화" data-section="Part 4">
+      <h2>LiteRT &amp; 모델 최적화</h2>
+      <p class="sub">PyTorch에서 온디바이스 TFLite 배포까지</p>
+      <div class="content-body flex flex-col gap-6 mt-2">
+        <div class="convert-flow">
+          <div class="convert-box"><div class="ext mono">.pth</div><div class="size">200MB</div><div class="desc">PyTorch</div></div>
+          <div class="convert-arrow">&rarr;<span>ONNX</span></div>
+          <div class="convert-box"><div class="ext mono">.onnx</div><div class="size">~100MB</div><div class="desc">중간 단계</div></div>
+          <div class="convert-arrow">&rarr;<span>FP16</span></div>
+          <div class="convert-box highlight"><div class="ext mono">.tflite</div><div class="size">16MB</div><div class="desc">온디바이스</div></div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:10px">FP16 양자화</h3>
+            <div class="bullets">
+              <div class="bullet green">모델 크기 약 12배 감소 (200MB &rarr; 16MB)</div>
+              <div class="bullet green">정확도 손실 최소 (mAP 1% 미만 하락)</div>
+              <div class="bullet green">하드웨어 가속을 위한 GPU Delegate 호환</div>
+              <div class="bullet green">FlatBuffers 직렬화로 제로 카피 로딩</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:10px">LiteRT 런타임</h3>
+            <div class="bullets">
+              <div class="bullet blue">TensorFlow Lite에서 LiteRT로 업그레이드 (Google 신규 브랜드)</div>
+              <div class="bullet blue">모바일 GPU 병렬 추론을 위한 GPU Delegate</div>
+              <div class="bullet blue">ByteBuffer 입출력의 Interpreter API</div>
+              <div class="bullet blue">코루틴 통합: Dispatchers.Default에서 추론 실행</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 16: CameraX + MediaPipe ===== -->
+    <div class="slide content-slide" data-title="CameraX + MediaPipe" data-section="Part 4">
+      <h2>CameraX + MediaPipe 파이프라인</h2>
+      <p class="sub">이중 AI 모델: YOLOX가 상품을, MediaPipe가 손을 탐지</p>
+      <div class="content-body flex flex-col items-center gap-6 mt-2">
+        <div class="flow">
+          <span class="flow-step" style="background:rgba(30,58,95,.1);color:var(--primary)">&#128247; CameraX 프레임</span>
+          <span class="flow-arrow">&rarr;</span>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span style="background:rgba(232,108,40,.1);color:var(--orange);padding:6px 14px;border-radius:8px;font-size:.8rem;font-weight:600">YOLOX: 상품 바운딩 박스</span>
+            <span style="background:rgba(5,150,105,.1);color:var(--green);padding:6px 14px;border-radius:8px;font-size:.8rem;font-weight:600">MediaPipe: 손 랜드마크</span>
+          </div>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step blue">좌표 매핑</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="flow-step green">&#9995; 터치 감지</span>
+        </div>
+        <div class="grid-2 w-full mt-2">
+          <div class="card">
+            <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:10px">YOLOX 추론 경로</h3>
+            <div class="bullets">
+              <div class="bullet orange">ImageProxy &rarr; RGBA Bitmap &rarr; 416x416 리사이즈</div>
+              <div class="bullet orange">ByteBuffer 정규화 (0-1 범위)</div>
+              <div class="bullet orange">백그라운드 스레드에서 TFLite Interpreter.run() 실행</div>
+              <div class="bullet orange">NMS + 신뢰도 필터링 (임계값: 0.5)</div>
+              <div class="bullet orange">출력: classId, confidence, 바운딩 박스 (x,y,w,h)</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:10px">MediaPipe 손 경로</h3>
+            <div class="bullets">
+              <div class="bullet green">CameraX 프레임 &rarr; BitmapImageBuilder &rarr; MPImage</div>
+              <div class="bullet green">HandLandmarker.detect()로 손당 21개 랜드마크 반환</div>
+              <div class="bullet green">검지 끝(INDEX_FINGER_TIP, 랜드마크 #8) 추출</div>
+              <div class="bullet green">정규화 좌표를 이미지 픽셀 공간으로 변환</div>
+              <div class="bullet green">겹침 검사: 검지 끝이 확장된 상품 BBox 안에 있는지 확인</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 17: 자이로 트래킹 ===== -->
+    <div class="slide content-slide" data-title="자이로 안정화" data-section="Part 4">
+      <h2>자이로 안정화</h2>
+      <p class="sub">회전 센서를 활용하여 바운딩 박스를 월드 공간에 고정</p>
+      <div class="content-body split">
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span><span class="code-filename">GyroTrackingManager.kt</span><span class="code-lang">Kotlin</span></div>
+          <pre class="code">// GyroTrackingManager.kt - 핵심 로직
+private fun processRotationVector(event: SensorEvent) {
+  SensorManager.getRotationMatrixFromVector(
+    currentRotationMatrix, rv
+  )
+  SensorManager.getOrientation(adjustedMatrix, orientation)
+
+  var deltaYaw   = orientation[0] - initialOrientation[0]
+  var deltaPitch  = orientation[1] - initialOrientation[1]
+
+  // 카메라가 오른쪽으로 회전 -> 객체는 화면에서 왼쪽으로 이동
+  val rotationShiftX = -deltaYaw * pixelsPerRadianX
+                       * SENSITIVITY_FACTOR
+  val rotationShiftY = deltaPitch * pixelsPerRadianY
+                       * SENSITIVITY_FACTOR
+
+  // 지수 이동 평균으로 스무딩
+  val newLeft = currentSmoothedRect.left +
+    (targetX - currentSmoothedRect.left) * SMOOTHING_ALPHA
+}</pre>
+        </div>
+        <div class="flex flex-col justify-center">
+          <div class="bullets">
+            <div class="bullet blue">회전 벡터 센서 &rarr; 초기 방향으로부터의 deltaYaw/deltaPitch 계산</div>
+            <div class="bullet blue">카메라 움직임 역보정: 카메라가 오른쪽 패닝 = 박스는 왼쪽으로 이동</div>
+            <div class="bullet blue">알려진 FOV(수평 79도)를 이용한 픽셀/라디안 변환</div>
+            <div class="bullet blue">지터 억제를 위한 지수 스무딩 (alpha=0.25)</div>
+            <div class="bullet blue">센서 판독값 안정화를 위한 500ms 웜업 기간</div>
+            <div class="bullet blue">범위 이탈 감지: 15프레임 연속 이탈 시 트래킹 손실 판정</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 18: 오클루전 처리 ===== -->
+    <div class="slide content-slide" data-title="오클루전 처리" data-section="Part 4">
+      <h2>오클루전 처리 (Optical Flow)</h2>
+      <p class="sub">손이 상품을 가릴 때, 배경 움직임을 대신 추적</p>
+      <div class="content-body split">
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span><span class="code-filename">OpticalFlowTracker.kt</span><span class="code-lang">Kotlin</span></div>
+          <pre class="code">// OpticalFlowTracker.kt
+fun update(
+  bitmap: Bitmap,
+  excludeHandRect: RectF?,
+  excludeBoxRect: RectF?
+): Pair&lt;Float, Float&gt;? {
+  // 속도를 위해 320x240으로 다운스케일
+  val smallBitmap = Bitmap.createScaledBitmap(
+    bitmap, processWidth, processHeight, true
+  )
+  // 손 &amp; 타겟 영역 마스킹
+  val mask = createExcludeMask(pw, ph,
+    handRect, boxRect, scaleX, scaleY)
+
+  // Lucas-Kanade 옵티컬 플로우
+  Video.calcOpticalFlowPyrLK(
+    prevGray, gray, prevPts, nextPts, status, err
+  )
+
+  // IQR 이상치 제거 + 중앙값 플로우
+  val (dxList, dyList) = filterOutliersIqr(validDx, validDy)
+  return Pair(median(dxList)*scaleX, median(dyList)*scaleY)
+}</pre>
+        </div>
+        <div class="flex flex-col justify-center">
+          <div class="bullets">
+            <div class="bullet orange">손이 상품 바운딩 박스와 겹칠 때 트리거 (오클루전 이벤트)</div>
+            <div class="bullet orange">손 + 타겟 영역을 마스킹하여 배경 특징점만 추적</div>
+            <div class="bullet orange">goodFeaturesToTrack: 품질 임계값 0.1로 80개 코너 포인트 검출</div>
+            <div class="bullet orange">Lucas-Kanade 피라미드: 프레임 간 특징점 변위 추적</div>
+            <div class="bullet orange">IQR 기반 이상치 제거 (k=1.5)로 강건한 움직임 추정</div>
+            <div class="bullet orange">중앙값 dx/dy를 바운딩 박스에 적용하여 고정 유지</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 19: 코루틴 ===== -->
+    <div class="slide content-slide" data-title="코루틴 아키텍처" data-section="Part 4">
+      <h2>코루틴 &amp; 비동기 아키텍처</h2>
+      <p class="sub">이중 AI 모델을 실행하면서 UI 스레드를 자유롭게 유지</p>
+      <div class="content-body split">
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span><span class="code-filename">HomeFragment.kt</span><span class="code-lang">Kotlin</span></div>
+          <pre class="code">// HomeFragment.kt - 메인 스레드 외부에서의 추론
+cameraExecutor = Executors.newSingleThreadExecutor()
+
+// 백그라운드 실행자에서 CameraX ImageAnalysis
+ImageAnalysis.Builder()
+  .setResolutionSelector(resolutionSelector)
+  .setBackpressureStrategy(STRATEGY_KEEP_ONLY_LATEST)
+  .build().also { analysis ->
+    analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+      // YOLOX 추론 (무거운 연산)
+      val results = runYoloxInference(imageProxy)
+
+      // UI 업데이트를 위해 Main으로 전환
+      withContext(Dispatchers.Main) {
+        overlayView.setDetections(results, w, h)
+      }
+    }
+  }
+
+// Room DB 쿼리 (IO 스레드)
+lifecycleScope.launch(Dispatchers.IO) {
+  val repo = SearchHistoryRepository(db)
+  repo.insert(SearchHistoryItem(...))
+}</pre>
+        </div>
+        <div class="flex flex-col justify-center">
+          <div class="bullets">
+            <div class="bullet green">CameraX ImageAnalysis용 SingleThreadExecutor - 직렬 프레임 처리</div>
+            <div class="bullet green">STRATEGY_KEEP_ONLY_LATEST: 추론이 느리면 프레임 드롭, 백프레셔 없음</div>
+            <div class="bullet green">CPU 집약적 YOLOX 추론을 위한 Dispatchers.Default</div>
+            <div class="bullet green">Room 데이터베이스 및 네트워크 호출을 위한 Dispatchers.IO</div>
+            <div class="bullet green">UI 업데이트(오버레이, 버튼, TTS 트리거)를 위한 Dispatchers.Main</div>
+            <div class="bullet green">lifecycleScope로 Fragment 파괴 시 코루틴 자동 취소 보장</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 20: 유의어 API ===== -->
+    <div class="slide content-slide" data-title="검색 & 유의어" data-section="Part 4">
+      <h2>검색 &amp; 유의어 시스템</h2>
+      <p class="sub">벡터 유사도를 활용하여 자연어를 YOLOX 클래스 ID로 매핑</p>
+      <div class="content-body split">
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span><span class="code-filename">SynonymApi.kt</span><span class="code-lang">Kotlin</span></div>
+          <pre class="code">// SynonymApi.kt (Retrofit)
+interface SynonymApi {
+  @GET("synonyms/answers")
+  suspend fun getAnswerProximityWords()
+    : AnswerProximityResponse
+
+  @GET("synonyms/products")
+  suspend fun getProductProximityWords()
+    : ProductProximityResponse
+}
+
+// 서버: Node.js + MongoDB + e5-small
+// 사용자가 "콜라" -> 벡터 검색으로
+// 가장 가까운 매칭: "coca_cola" (classId)
+//
+// 플로우:
+// STT("콜라") -> SynonymRepository
+//   .findClassByProximity("콜라")
+//   -> "coca_cola" (클래스 레이블)
+//   -> YOLOX 타겟 필터</pre>
+        </div>
+        <div class="flex flex-col justify-center">
+          <div class="bullets">
+            <div class="bullet blue">사용자가 자연어로 발화 (예: '콜라', '코카콜라', '사이다')</div>
+            <div class="bullet blue">SynonymRepository가 앱 시작 시 근접 단어 매핑을 로드</div>
+            <div class="bullet blue">서버에서 e5-small 임베딩으로 의미 벡터 검색 수행</div>
+            <div class="bullet blue">MongoDB에 임베딩과 함께 상품-유의어 매핑 저장</div>
+            <div class="bullet blue">폴백: 오프라인 매칭을 위한 로컬 ProductDictionary.json</div>
+            <div class="bullet blue">결과: 자연어 발화 &rarr; YOLOX 클래스 레이블로 타겟 탐지</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 21: Room & FTS ===== -->
+    <div class="slide content-slide" data-title="Room DB + FTS" data-section="Part 4">
+      <h2>로컬 데이터: Room DB + FTS</h2>
+      <p class="sub">최근 및 자주 검색한 상품에 즉시 접근</p>
+      <div class="content-body split">
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span><span class="code-filename">SearchHistoryDao.kt</span><span class="code-lang">Kotlin</span></div>
+          <pre class="code">// SearchHistoryDao.kt
+@Dao
+interface SearchHistoryDao {
+
+  @Insert
+  suspend fun insert(item: SearchHistoryItem)
+
+  @Query("""
+    SELECT * FROM search_history
+    ORDER BY searchedAt DESC
+    LIMIT 100
+  """)
+  fun getAllOrderedByRecent()
+    : Flow&lt;List&lt;SearchHistoryItem&gt;&gt;
+
+  @Query("""
+    SELECT classLabel,
+           COUNT(*) as searchCount
+    FROM search_history
+    GROUP BY classLabel
+    ORDER BY searchCount DESC
+    LIMIT 50
+  """)
+  fun getFrequentClassLabels()
+    : Flow&lt;List&lt;FrequentSearchItem&gt;&gt;
+}</pre>
+        </div>
+        <div class="flex flex-col justify-center">
+          <div class="bullets">
+            <div class="bullet green">SearchHistoryItem 엔티티의 Room DB (쿼리, classLabel, 타임스탬프, 출처)</div>
+            <div class="bullet green">최근 검색: 타임스탬프 기준 정렬, LIMIT 100</div>
+            <div class="bullet green">자주 검색: classLabel별 GROUP BY, COUNT(*)로 인기도 순위</div>
+            <div class="bullet green">Flow&lt;List&gt;로 UI에 반응형 업데이트 제공 (Compose/LiveData 브릿지)</div>
+            <div class="bullet green">원터치 재검색: 히스토리 항목 선택 시 음성 입력 과정을 완전 생략</div>
+            <div class="bullet green">데이터는 로컬에 저장 - 히스토리 기능에 서버 의존성 없음</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 22: 트러블슈팅 #1 ===== -->
+    <div class="slide content-slide" data-title="트러블슈팅 #1" data-section="Part 5">
+      <h2>트러블슈팅 #1: 모델 호환성</h2>
+      <p class="sub">TensorFlow Lite 16KB 페이지 크기 오류</p>
+      <div class="content-body grid-2 items-start mt-2" style="align-items:flex-start">
+        <div class="highlight-box orange">
+          <h3 class="orange">&#9888; 문제</h3>
+          <p class="text-sm text-muted leading-relaxed">TFLite 모델이 Android 15 기기에서 FlatBuffers 페이지 정렬 오류로 크래시되었습니다. Android 15에서 도입된 16KB 페이지 크기가 기존 TFLite 런타임과 호환되지 않았습니다.</p>
+          <div class="err-code"><code>java.lang.IllegalArgumentException: Model buffer is not aligned to 16KB page boundary</code></div>
+        </div>
+        <div class="highlight-box green">
+          <h3 class="green">&#10004; 해결</h3>
+          <div class="bullets mt-4">
+            <div class="bullet green">TensorFlow Lite에서 Google의 새로운 LiteRT 런타임으로 업그레이드</div>
+            <div class="bullet green">LiteRT가 16KB 페이지 정렬을 내부적으로 처리</div>
+            <div class="bullet green">FlatBuffers 직렬화를 최신 스펙으로 업데이트</div>
+            <div class="bullet green">Android 14 및 15 기기에서 검증 완료</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 23: 트러블슈팅 #2 ===== -->
+    <div class="slide content-slide" data-title="트러블슈팅 #2" data-section="Part 5">
+      <h2>트러블슈팅 #2: 거리 추정</h2>
+      <p class="sub">ARCore가 근거리에서 실패 - 핀홀 카메라 모델로 해결</p>
+      <div class="content-body split">
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-dot r"></span><span class="code-dot y"></span><span class="code-dot g"></span><span class="code-filename">HomeFragment.kt</span><span class="code-lang">Kotlin</span></div>
+          <pre class="code">// HomeFragment.kt - 핀홀 카메라 모델
+private fun computeDistanceMm(
+  boxWidthPx: Float,
+  imageHeight: Int,
+  label: String,
+  zoomRatio: Float = 1f
+): Float {
+  if (boxWidthPx &lt;= 0f || imageHeight &lt;= 0)
+    return Float.MAX_VALUE
+
+  val zoom = zoomRatio.coerceAtLeast(0.1f)
+  val realPixelWidth = boxWidthPx / zoom
+  val focalLengthPx = imageHeight * FOCAL_LENGTH_FACTOR
+  val physicalWidthMm =
+    ProductDictionary.getPhysicalWidthMm(label)
+
+  // 거리 = 초점거리 * 실제너비 / 픽셀너비
+  val rawDistanceMm =
+    (focalLengthPx * physicalWidthMm) / realPixelWidth
+  return rawDistanceMm * DISTANCE_CALIBRATION_FACTOR
+}</pre>
+        </div>
+        <div class="flex flex-col justify-center">
+          <div class="bullets">
+            <div class="bullet orange">ARCore 깊이 API가 50cm 미만 거리에서 실패 (구조광 방식의 한계)</div>
+            <div class="bullet orange">해결책: 고전적인 핀홀 카메라 모델 공식 적용</div>
+            <div class="bullet orange">거리 = 초점거리 x 실제 너비 / 픽셀 너비</div>
+            <div class="bullet orange">ProductDictionary가 클래스별 실제 치수(mm) 제공</div>
+            <div class="bullet orange">FOCAL_LENGTH_FACTOR (1.1) 기기 FOV별 보정</div>
+            <div class="bullet orange">DISTANCE_CALIBRATION_FACTOR (1.5) 2D 투영 오차 보정</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 24: 한계점 ===== -->
+    <div class="slide content-slide" data-title="한계점" data-section="Part 6">
+      <h2>기술적 한계점</h2>
+      <p class="sub">현재의 허들과 솔직한 평가</p>
+      <div class="content-body grid-3 mt-2">
+        <div class="card card-t-orange">
+          <div style="font-size:2rem;margin-bottom:12px">&#9888;</div>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">발열 &amp; 배터리</h3>
+          <p class="text-sm text-muted leading-relaxed">2개의 AI 모델(YOLOX + MediaPipe)과 CameraX를 동시에 실행하면 상당한 발열과 배터리 소모가 발생합니다. 지속 사용은 약 15-20분으로 제한됩니다.</p>
+        </div>
+        <div class="card card-t-orange">
+          <div style="font-size:2rem;margin-bottom:12px">&#128200;</div>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">깊이 정확도</h3>
+          <p class="text-sm text-muted leading-relaxed">2D 카메라로는 측면 각도에서 깊이를 정확히 추정할 수 없습니다. 핀홀 모델은 정면 뷰를 가정하며, 비스듬한 각도에서는 상당한 거리 오차가 발생합니다.</p>
+        </div>
+        <div class="card card-t-orange">
+          <div style="font-size:2rem;margin-bottom:12px">&#9995;</div>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">터치 판정</h3>
+          <p class="text-sm text-muted leading-relaxed">3D 깊이 센서 없이는 손과 상품의 물리적 접촉 판단이 2D 바운딩 박스 겹침에 의존하며, 실제 공간 교차점이 아닙니다.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 25: 차별점 & 로드맵 ===== -->
+    <div class="slide content-slide" data-title="차별점 & 로드맵" data-section="Part 7">
+      <h2>차별점 &amp; 향후 로드맵</h2>
+      <div class="content-body flex flex-col gap-6 mt-2">
+        <table class="compare">
+          <thead><tr><th>기능</th><th>GrabIT</th><th>Sullivan+</th></tr></thead>
+          <tbody>
+            <tr><td>안내 방식</td><td><strong>능동적 (손 안내)</strong></td><td>수동적 (텍스트 읽기)</td></tr>
+            <tr><td>처리 방식</td><td><strong>온디바이스 (지연 없음)</strong></td><td>서버 기반 (지연 발생)</td></tr>
+            <tr><td>비용</td><td><strong>무료 &amp; 오픈소스</strong></td><td>구독 모델</td></tr>
+            <tr><td>손 감지</td><td><strong>MediaPipe 실시간</strong></td><td>미지원</td></tr>
+            <tr><td>오프라인 모드</td><td><strong>전체 기능 사용 가능</strong></td><td>인터넷 필요</td></tr>
+          </tbody>
+        </table>
+        <div class="roadmap-grid">
+          <div class="roadmap-card highlight-box blue">
+            <div style="font-size:1.5rem">&#128083;</div>
+            <h4>하드웨어</h4>
+            <p>핸즈프리 쇼핑 경험을 위한 스마트 글래스 통합</p>
+          </div>
+          <div class="roadmap-card highlight-box orange">
+            <div style="font-size:1.5rem">&#9889;</div>
+            <h4>소프트웨어</h4>
+            <p>정밀 3D 깊이 추정을 위한 고급 ARCore + LiDAR</p>
+          </div>
+          <div class="roadmap-card highlight-box green">
+            <div style="font-size:1.5rem">&#128269;</div>
+            <h4>기능</h4>
+            <p>상품 파지 후 영양 성분표 읽기를 위한 OCR</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /slideArea -->
+
+  <!-- Bottom navigation -->
+  <div class="bottom-bar">
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="nav-btn" id="prevBtn" aria-label="이전 슬라이드">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button class="nav-btn" id="nextBtn" aria-label="다음 슬라이드">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span id="sectionLabel" class="text-xs text-muted mono"></span>
+      <span id="titleLabel" style="font-size:.9rem;font-weight:500"></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="nav-btn" id="overviewBtn" aria-label="슬라이드 목록">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </button>
+      <span id="counter" class="mono text-sm text-muted" style="font-variant-numeric:tabular-nums"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const allSlides = document.querySelectorAll('.slide');
+  const total = allSlides.length;
+  let current = 0;
+  let overviewOpen = false;
+
+  const progress = document.getElementById('progress');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const overviewBtn = document.getElementById('overviewBtn');
+  const overviewEl = document.getElementById('overview');
+  const sectionLabel = document.getElementById('sectionLabel');
+  const titleLabel = document.getElementById('titleLabel');
+  const counter = document.getElementById('counter');
+
+  function buildOverview() {
+    let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h2 style="font-size:1.5rem;font-weight:700">슬라이드 목록</h2><button class="nav-btn" id="closeOverview"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div class="overview-grid">';
+    allSlides.forEach(function(s,i){
+      html += '<div class="overview-item'+(i===current?' current':'')+'" data-idx="'+i+'"><div class="sec">'+s.dataset.section+'</div><div class="ttl">'+s.dataset.title+'</div><div class="num">슬라이드 '+(i+1)+'</div></div>';
+    });
+    html += '</div>';
+    overviewEl.innerHTML = html;
+    document.getElementById('closeOverview').onclick = toggleOverview;
+    overviewEl.querySelectorAll('.overview-item').forEach(function(el){
+      el.onclick = function(){ goTo(parseInt(el.dataset.idx)); };
+    });
+  }
+
+  function showSlide() {
+    allSlides.forEach(function(s,i){ s.classList.toggle('active', i===current); });
+    progress.style.width = ((current+1)/total*100)+'%';
+    prevBtn.disabled = current===0;
+    nextBtn.disabled = current===total-1;
+    sectionLabel.textContent = allSlides[current].dataset.section;
+    titleLabel.textContent = allSlides[current].dataset.title;
+    counter.textContent = (current+1)+' / '+total;
+    if(overviewOpen){ overviewOpen=false; overviewEl.classList.remove('active'); }
+  }
+
+  function goTo(idx){
+    if(idx>=0 && idx<total){ current=idx; showSlide(); }
+  }
+
+  function toggleOverview(){
+    overviewOpen = !overviewOpen;
+    if(overviewOpen){ buildOverview(); overviewEl.classList.add('active'); allSlides.forEach(function(s){s.classList.remove('active');}); }
+    else { overviewEl.classList.remove('active'); showSlide(); }
+  }
+
+  prevBtn.onclick = function(){ goTo(current-1); };
+  nextBtn.onclick = function(){ goTo(current+1); };
+  overviewBtn.onclick = toggleOverview;
+
+  document.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='Enter'){ e.preventDefault(); goTo(current+1); }
+    else if(e.key==='ArrowLeft'||e.key==='Backspace'){ e.preventDefault(); goTo(current-1); }
+    else if(e.key==='Escape'){ toggleOverview(); }
+    else if(e.key==='Home'){ goTo(0); }
+    else if(e.key==='End'){ goTo(total-1); }
+  });
+
+  showSlide();
+})();
+</script>
+</body>
+</html>
