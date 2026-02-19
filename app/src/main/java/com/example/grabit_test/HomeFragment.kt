@@ -123,13 +123,16 @@ class HomeFragment : Fragment() {
     private val currentTargetLabel = AtomicReference<String>("")
 
     private var lastDirectionGuidanceTime = 0L
+    private var lastPreciseDirectionTime = 0L
     private var lastDistanceGuidanceTime = 0L
     private var lastActionGuidanceTime = 0L
     private val DIRECTION_GUIDANCE_COOLDOWN_MS = 4000L   // 왼쪽/오른쪽 (4초)
     private val DISTANCE_GUIDANCE_COOLDOWN_MS = 7000L    // "앞으로 오세요" (7초)
     private val ACTION_GUIDANCE_COOLDOWN_MS = 10000L    // "손을 뻗어 확인해보세요" (10초)
-    private val SAFE_ZONE_LEFT = 0.3f   // centerXNorm < 0.3 → Left Zone
-    private val SAFE_ZONE_RIGHT = 0.7f  // centerXNorm > 0.7 → Right Zone (Safe: 0.3..0.7)
+    private val PROXIMITY_MODE_MM = 700f                // 이 거리 이하 → 근거리 모드(비프 + N시 방향 손 뻗기)
+    private val PRECISE_DIRECTION_COOLDOWN_MS = 5000L   // "N시 방향, 우측 n도" 안내 쿨다운
+    private val SAFE_ZONE_LEFT = 0.42f   // centerXNorm < 0.42 → Left Zone
+    private val SAFE_ZONE_RIGHT = 0.58f  // centerXNorm > 0.58 → Right Zone (Safe: 0.42..0.58)
     private val REACH_ZONE_TOP = 0.35f   // centerYNorm < 0.35 → 위쪽 손 뻗기
     private val REACH_ZONE_BOTTOM = 0.65f // centerYNorm > 0.65 → 아래쪽 손 뻗기
     private val SEARCH_PING_INTERVAL_MS = 12000L  // 탐색 침묵 12초 시 핑 안내
@@ -166,7 +169,9 @@ class HomeFragment : Fragment() {
 
     private var sttManager: STTManager? = null
     private var ttsManager: TTSManager? = null
+    private var ttsGuidanceQueue: TtsPriorityQueue? = null
     private var beepPlayer: BeepPlayer? = null
+    private var proximityModeActive = false
     private var voiceFlowController: VoiceFlowController? = null
     private val searchTimeoutHandler = Handler(Looper.getMainLooper())
     private var searchTimeoutRunnable: Runnable? = null
@@ -435,15 +440,18 @@ class HomeFragment : Fragment() {
         }
     }
 
-    /** @param urgent true면 TTS 재생 중이어도 즉시 송출. false면 재생 중이면 무시(Drop).
+    /** @param urgent true면 TTS 재생 중이어도 즉시 송출. false면 항상 큐에 넣어 순차 재생(직접 FLUSH 안 함 → "찾았습니다" onDone 덮어쓰기 방지).
      * @param isAutoGuidance true면 STT 대화 직후 4초 breathing room 동안 무시(Drop).
      * onDone은 마지막 인자로 두어 trailing lambda 사용 가능. */
     private fun speak(text: String, urgent: Boolean = true, isAutoGuidance: Boolean = true, onDone: (() -> Unit)? = null) {
         if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
         if (isAutoGuidance && (voiceFlowController?.isInSttBreathingRoom() == true)) return
-        if (!urgent && (ttsManager?.isSpeaking() == true)) return
         if (!urgent && (waitingForTouchConfirm || touchConfirmInProgress || (sttManager?.isListening() == true))) return
-        ttsManager?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, onDone)
+        if (urgent) {
+            ttsManager?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, onDone)
+        } else {
+            ttsGuidanceQueue?.enqueue(text, TtsPriorityQueue.PRIORITY_NORMAL)
+        }
     }
 
     private fun updateVoiceButtonVisibility() {
@@ -457,6 +465,9 @@ class HomeFragment : Fragment() {
         _binding?.startOverlay?.visibility = View.VISIBLE
         searchState = SearchState.IDLE
         currentTargetLabel.set("")
+        proximityModeActive = false
+        beepPlayer?.stopProximityBeep()
+        ttsGuidanceQueue?.clear()
         ttsManager?.stop()
         sttManager?.cancelListening()
         isScanning = false
@@ -484,6 +495,7 @@ class HomeFragment : Fragment() {
         validationFailCount = 0
         closeDistanceFrameCount = 0
         lastDirectionGuidanceTime = 0L
+        lastPreciseDirectionTime = 0L
         lastDistanceGuidanceTime = 0L
         lastActionGuidanceTime = 0L
         lastStepGuidanceTime = 0L
@@ -535,6 +547,7 @@ class HomeFragment : Fragment() {
         ttsManager?.init { success ->
             requireActivity().runOnUiThread {
                 if (success && beepPlayer != null) {
+                    ttsGuidanceQueue = ttsManager?.let { TtsPriorityQueue(it) }
                     voiceFlowController = VoiceFlowController(
                         ttsManager = ttsManager!!,
                         onStateChanged = { _, _ -> requireActivity().runOnUiThread { updateVoiceFlowButtons(); updateVoiceButtonVisibility() } },
@@ -987,6 +1000,9 @@ class HomeFragment : Fragment() {
             },
             onTrackingLost = { transitionToSearching() }
         )
+        gyroManager.onDeltaYawTooHigh = {
+            requireActivity().runOnUiThread { speak("천천히 움직여주세요", false) }
+        }
     }
 
     private fun initMediaPipeHands() {
@@ -1063,12 +1079,26 @@ class HomeFragment : Fragment() {
         val centerXNorm = boxCenterX / imageWidth
         val centerYNorm = (box.rect.top + box.rect.bottom) / 2f / imageHeight.coerceAtLeast(1)
         val now = System.currentTimeMillis()
+        val preciseDir = PreciseDirection.getPreciseDirection(centerXNorm, centerYNorm)
         requireActivity().runOnUiThread {
             val boxWidthPx = box.rect.width()
             val zoomRatio = currentZoomRatio
             val distMm = computeDistanceMm(boxWidthPx, imageHeight, box.label, zoomRatio)
 
             if (voiceFlowController?.isInSttBreathingRoom() == true) return@runOnUiThread
+
+            // 근거리 모드(700mm 이하): 비프 + N시 방향 손 뻗기
+            if (distMm <= PROXIMITY_MODE_MM) {
+                if (!proximityModeActive) {
+                    proximityModeActive = true
+                    beepPlayer?.startProximityBeep()
+                }
+            } else {
+                if (proximityModeActive) {
+                    proximityModeActive = false
+                    beepPlayer?.stopProximityBeep()
+                }
+            }
 
             if (distMm <= 400f) {
                 val inEdgeGuard = centerXNorm < 0.05f || centerXNorm > 0.95f || centerYNorm < 0.05f || centerYNorm > 0.95f
@@ -1084,10 +1114,14 @@ class HomeFragment : Fragment() {
                                     now - lastActionGuidanceTime >= ACTION_GUIDANCE_COOLDOWN_MS) {
                                     lastActionGuidanceTime = now
                                     closeDistanceFrameCount = 0
-                                    val reachMsg = when {
-                                        centerYNorm < REACH_ZONE_TOP -> "위쪽으로 손을 뻗어 확인해보세요."
-                                        centerYNorm > REACH_ZONE_BOTTOM -> "아래쪽으로 손을 뻗어 확인해보세요."
-                                        else -> "정면으로 손을 뻗어 확인해보세요."
+                                    val reachMsg = if (distMm <= PROXIMITY_MODE_MM) {
+                                        PreciseDirection.formatProximityReach(preciseDir.clockHour)
+                                    } else {
+                                        when {
+                                            centerYNorm < REACH_ZONE_TOP -> "위쪽으로 손을 뻗어 확인해보세요."
+                                            centerYNorm > REACH_ZONE_BOTTOM -> "아래쪽으로 손을 뻗어 확인해보세요."
+                                            else -> "정면으로 손을 뻗어 확인해보세요."
+                                        }
                                     }
                                     speak(reachMsg, false)
                                 }
@@ -1099,8 +1133,8 @@ class HomeFragment : Fragment() {
                 }
             }
 
-            val leftBound = if (distMm <= 500f) 0.15f else 0.3f
-            val rightBound = if (distMm <= 500f) 0.85f else 0.7f
+            val leftBound = if (distMm <= 500f) 0.15f else SAFE_ZONE_LEFT
+            val rightBound = if (distMm <= 500f) 0.85f else SAFE_ZONE_RIGHT
             val offset = centerXNorm - 0.5f
 
             when {
@@ -1111,6 +1145,11 @@ class HomeFragment : Fragment() {
                         val msg = if (offset < -0.25f) "왼방향으로 많이 회전하세요." else "왼방향으로 살짝 회전하세요."
                         speak(msg, false)
                     }
+                    if (now - lastPreciseDirectionTime >= PRECISE_DIRECTION_COOLDOWN_MS) {
+                        lastPreciseDirectionTime = now
+                        val preciseMsg = PreciseDirection.formatImmediateGuidance(preciseDir.clockHour, preciseDir.horizontalDeg, preciseDir.verticalDeg)
+                        speak(preciseMsg, false)
+                    }
                     return@runOnUiThread
                 }
                 centerXNorm > rightBound -> {
@@ -1119,6 +1158,11 @@ class HomeFragment : Fragment() {
                         lastDirectionGuidanceTime = now
                         val msg = if (offset > 0.25f) "오른방향으로 많이 회전하세요." else "오른방향으로 살짝 회전하세요."
                         speak(msg, false)
+                    }
+                    if (now - lastPreciseDirectionTime >= PRECISE_DIRECTION_COOLDOWN_MS) {
+                        lastPreciseDirectionTime = now
+                        val preciseMsg = PreciseDirection.formatImmediateGuidance(preciseDir.clockHour, preciseDir.horizontalDeg, preciseDir.verticalDeg)
+                        speak(preciseMsg, false)
                     }
                     return@runOnUiThread
                 }
@@ -1144,10 +1188,14 @@ class HomeFragment : Fragment() {
                                     now - lastActionGuidanceTime >= ACTION_GUIDANCE_COOLDOWN_MS) {
                                     lastActionGuidanceTime = now
                                     closeDistanceFrameCount = 0
-                                    val reachMsg = when {
-                                        centerYNorm < REACH_ZONE_TOP -> "위쪽으로 손을 뻗어 확인해보세요."
-                                        centerYNorm > REACH_ZONE_BOTTOM -> "아래쪽으로 손을 뻗어 확인해보세요."
-                                        else -> "정면으로 손을 뻗어 확인해보세요."
+                                    val reachMsg = if (distMm <= PROXIMITY_MODE_MM) {
+                                        PreciseDirection.formatProximityReach(preciseDir.clockHour)
+                                    } else {
+                                        when {
+                                            centerYNorm < REACH_ZONE_TOP -> "위쪽으로 손을 뻗어 확인해보세요."
+                                            centerYNorm > REACH_ZONE_BOTTOM -> "아래쪽으로 손을 뻗어 확인해보세요."
+                                            else -> "정면으로 손을 뻗어 확인해보세요."
+                                        }
                                     }
                                     speak(reachMsg, false)
                                 }
@@ -1379,8 +1427,12 @@ class HomeFragment : Fragment() {
     private fun letterboxBitmap(bitmap: Bitmap, inputSize: Int): Pair<Bitmap, Float> =
         BitmapUtils.createLetterboxBitmap(bitmap, inputSize)
 
+    /** 타일 겹침 비율 (0.15 = 15%). 경계에 걸친 물체도 한 타일 안에 들어가도록. */
+    private val TILING_OVERLAP_RATIO = 0.15f
+
     /**
-     * 전체 프레임을 grid x grid 타일로 자른다. YOLOX는 각 타일마다 실행하고, 결과는 (offsetX, offsetY)를 더해 전역 좌표로 쓴다.
+     * 전체 프레임을 grid x grid 타일로 자른다. 인접 타일이 [TILING_OVERLAP_RATIO]만큼 겹치도록 stride를 줄인다.
+     * YOLOX는 각 타일마다 실행하고, 결과는 (offsetX, offsetY)를 더해 전역 좌표로 쓴다.
      * @return List of (타일 비트맵, 전역 기준 offsetX, offsetY)
      */
     private fun createTiles(bitmap: Bitmap, grid: Int): List<Triple<Bitmap, Int, Int>> {
@@ -1388,14 +1440,18 @@ class HomeFragment : Fragment() {
         val h = bitmap.height
         if (w < grid || h < grid) return listOf(Triple(bitmap, 0, 0))
         val tiles = mutableListOf<Triple<Bitmap, Int, Int>>()
-        val strideX = w / grid
-        val strideY = h / grid
+        val rawTileW = w / grid
+        val rawTileH = h / grid
+        val overlapX = (rawTileW * TILING_OVERLAP_RATIO).toInt().coerceIn(1, maxOf(1, rawTileW - 1))
+        val overlapY = (rawTileH * TILING_OVERLAP_RATIO).toInt().coerceIn(1, maxOf(1, rawTileH - 1))
+        val strideX = rawTileW - overlapX
+        val strideY = rawTileH - overlapY
         for (jy in 0 until grid) {
             for (ix in 0 until grid) {
                 val left = ix * strideX
                 val top = jy * strideY
-                val tileW = if (ix == grid - 1) w - left else strideX
-                val tileH = if (jy == grid - 1) h - top else strideY
+                val tileW = if (ix == grid - 1) (w - left).coerceAtLeast(1) else rawTileW
+                val tileH = if (jy == grid - 1) (h - top).coerceAtLeast(1) else rawTileH
                 if (tileW <= 0 || tileH <= 0) continue
                 val tile = Bitmap.createBitmap(bitmap, left, top, tileW, tileH)
                 tiles.add(Triple(tile, left, top))

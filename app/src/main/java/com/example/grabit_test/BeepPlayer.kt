@@ -18,6 +18,9 @@ class BeepPlayer {
         private const val TAG = "BeepPlayer"
         /** 삐 소리 길이: 1초 (삐~~~~) */
         private const val BEEP_DURATION_MS = 1000
+        /** 근거리(팔 뻗기) 모드: 50ms 주기 짧은 비프 */
+        const val PROXIMITY_BEEP_PERIOD_MS = 50L
+        private const val PROXIMITY_BEEP_LENGTH_MS = 30
         private const val SAMPLE_RATE = 44100
         private const val BEEP_FREQ_HZ = 880
         /** 볼륨 0~1 (원래 ToneGenerator 80 수준에 맞춤) */
@@ -25,7 +28,9 @@ class BeepPlayer {
     }
 
     private var audioTrack: AudioTrack? = null
+    private var proximityBeepTrack: AudioTrack? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var proximityRunnable: Runnable? = null
 
     fun init(): Boolean {
         return try {
@@ -54,11 +59,60 @@ class BeepPlayer {
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
             audioTrack?.write(buffer, 0, buffer.size)
+            // 근거리 모드용 짧은 비프 (30ms)
+            val shortSamples = (SAMPLE_RATE * PROXIMITY_BEEP_LENGTH_MS / 1000.0).toInt()
+            val shortBuffer = ShortArray(shortSamples)
+            for (i in 0 until shortSamples) {
+                shortBuffer[i] = (AMPLITUDE * sin(angularFreq * i) * Short.MAX_VALUE).toInt().toShort()
+            }
+            proximityBeepTrack = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(SAMPLE_RATE)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(shortBuffer.size * 2)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+            proximityBeepTrack?.write(shortBuffer, 0, shortBuffer.size)
             true
         } catch (e: Exception) {
             Log.e(TAG, "BeepPlayer 초기화 실패", e)
             false
         }
+    }
+
+    /** 근거리 모드: 50ms 주기로 짧은 비프 반복. 중지 시 stopProximityBeep() 호출. */
+    fun startProximityBeep() {
+        stopProximityBeep()
+        val pt = proximityBeepTrack ?: return
+        proximityRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    pt.stop()
+                    pt.reloadStaticData()
+                    pt.play()
+                } catch (_: Exception) {}
+                handler.postDelayed(this, PROXIMITY_BEEP_PERIOD_MS)
+            }
+        }
+        handler.post(proximityRunnable!!)
+    }
+
+    fun stopProximityBeep() {
+        proximityRunnable?.let { handler.removeCallbacks(it) }
+        proximityRunnable = null
+        try {
+            proximityBeepTrack?.stop()
+        } catch (_: Exception) {}
     }
 
     /**
@@ -88,10 +142,14 @@ class BeepPlayer {
     }
 
     fun release() {
+        stopProximityBeep()
         try {
             audioTrack?.stop()
             audioTrack?.release()
             audioTrack = null
+            proximityBeepTrack?.stop()
+            proximityBeepTrack?.release()
+            proximityBeepTrack = null
             handler.removeCallbacksAndMessages(null)
         } catch (e: Exception) {
             Log.e(TAG, "release 실패", e)

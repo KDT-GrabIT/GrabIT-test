@@ -40,9 +40,11 @@ object SynonymRepository {
     suspend fun loadFromRemote() = withContext(Dispatchers.IO) {
         loadDefaultAnswers()
         if (!MongoConfig.isApiConfigured()) {
+            Log.d(TAG, "유의어 원격 로드: API 미설정, 기본 대답만 사용")
             lastLoadSuccess = true
             return@withContext
         }
+        Log.d(TAG, "유의어 원격 로드 시작")
         try {
             val api = SynonymApi.create()
             val answers = api.getAnswerProximityWords()
@@ -50,8 +52,9 @@ object SynonymRepository {
             mergeAnswerDocs(answers.items)
             mergeProductDocs(products.items)
             lastLoadSuccess = true
+            Log.d(TAG, "유의어 원격 로드 성공")
         } catch (e: Exception) {
-            Log.e(TAG, "원격 로드 실패, 기본값 유지", e)
+            Log.e(TAG, "유의어 원격 로드 실패, 기본값 유지", e)
             lastLoadSuccess = false
         }
     }
