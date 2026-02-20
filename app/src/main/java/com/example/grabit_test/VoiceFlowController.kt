@@ -45,6 +45,7 @@ class VoiceFlowController(
         WAITING_PRODUCT_NAME,
         CONFIRM_PRODUCT,
         WAITING_CONFIRMATION,
+        WAITING_GRASP_CONFIRMATION,
         SEARCHING_PRODUCT,
         SEARCH_RESULT,
         SEARCH_FAILED
@@ -88,6 +89,7 @@ class VoiceFlowController(
         when (currentState) {
             VoiceFlowState.WAITING_PRODUCT_NAME -> handleProductNameReceived(normalized)
             VoiceFlowState.WAITING_CONFIRMATION -> handleConfirmationReceived(normalized)
+            VoiceFlowState.WAITING_GRASP_CONFIRMATION -> handleGraspConfirmationReceived(normalized)
             VoiceFlowState.APP_START -> {
                 if (isRepeatCommand(normalized)) repeatLast()
                 else if (isHelpCommand(normalized)) speakHelp()
@@ -162,6 +164,25 @@ class VoiceFlowController(
             t == "no" || t == "n"
     }
 
+    private fun handleGraspConfirmationReceived(text: String) {
+        when {
+            isHelpCommand(text) -> speakHelp()
+            isRepeatCommand(text) -> startGraspConfirmation()
+            isConfirmationYes(text) -> {
+                transitionTo(VoiceFlowState.SEARCH_RESULT)
+                speak(VoicePrompts.PROMPT_FOUND_AND_END)
+            }
+            isConfirmationNo(text) -> {
+                transitionTo(VoiceFlowState.SEARCHING_PRODUCT)
+                speak("다시 상품을 찾겠습니다. 주변을 천천히 비춰주세요.")
+                onStartSearch(currentProductName)
+            }
+            else -> {
+                startGraspConfirmation()
+            }
+        }
+    }
+
     private fun isHelpCommand(text: String) =
         text.contains("도움말") || text.contains("도움") || text.equals("help", ignoreCase = true)
 
@@ -178,11 +199,18 @@ class VoiceFlowController(
 
     /** 확인(예) 버튼 클릭: 맞으면 예와 동일하게 검색 시작 */
     fun onConfirmClicked() {
-        if (currentState == VoiceFlowState.CONFIRM_PRODUCT || currentState == VoiceFlowState.WAITING_CONFIRMATION) {
-            transitionTo(VoiceFlowState.SEARCHING_PRODUCT)
-            val msg = msgSearching(currentProductName)
-            speak(msg)
-            onStartSearch(currentProductName)
+        when (currentState) {
+            VoiceFlowState.CONFIRM_PRODUCT,
+            VoiceFlowState.WAITING_CONFIRMATION -> {
+                transitionTo(VoiceFlowState.SEARCHING_PRODUCT)
+                val msg = msgSearching(currentProductName)
+                speak(msg)
+                onStartSearch(currentProductName)
+            }
+            VoiceFlowState.WAITING_GRASP_CONFIRMATION -> {
+                handleGraspConfirmationReceived("예")
+            }
+            else -> {}
         }
     }
 
@@ -196,6 +224,9 @@ class VoiceFlowController(
                 speak(MSG_ASK_PRODUCT) {
                     onRequestStartStt()
                 }
+            }
+            VoiceFlowState.WAITING_GRASP_CONFIRMATION -> {
+                handleGraspConfirmationReceived("아니오")
             }
             VoiceFlowState.SEARCH_FAILED -> {
                 transitionTo(VoiceFlowState.WAITING_PRODUCT_NAME)
@@ -217,11 +248,19 @@ class VoiceFlowController(
         confidencePercent: Int? = null
     ) {
         if (success) {
-            transitionTo(VoiceFlowState.SEARCH_RESULT)
-            // 위치/거리 안내는 HomeFragment transitionToLocked에서 이미 재생함. 중복 제거.
+            // 성공 시 즉시 종료하지 않고, 파지(접촉) 확인을 먼저 받는다.
+            startGraspConfirmation()
         } else {
             transitionTo(VoiceFlowState.SEARCH_FAILED)
             speak(MSG_SEARCH_FAILED)
+        }
+    }
+
+    /** 파지 확인 단계 시작: 확인 질문 후 STT 즉시 시작 */
+    fun startGraspConfirmation() {
+        transitionTo(VoiceFlowState.WAITING_GRASP_CONFIRMATION)
+        speak(VoicePrompts.PROMPT_ASK_GRASP_CONFIRM) {
+            onRequestStartStt()
         }
     }
 
@@ -380,7 +419,8 @@ class VoiceFlowController(
         currentState = state
         isNextStepVoiceInput = when (state) {
             VoiceFlowState.WAITING_PRODUCT_NAME,
-            VoiceFlowState.CONFIRM_PRODUCT -> true
+            VoiceFlowState.CONFIRM_PRODUCT,
+            VoiceFlowState.WAITING_GRASP_CONFIRMATION -> true
             VoiceFlowState.APP_START,
             VoiceFlowState.WAITING_CONFIRMATION,
             VoiceFlowState.SEARCHING_PRODUCT,
@@ -392,6 +432,7 @@ class VoiceFlowController(
             VoiceFlowState.WAITING_PRODUCT_NAME -> "상품명 입력 대기"
             VoiceFlowState.CONFIRM_PRODUCT -> "상품 확인"
             VoiceFlowState.WAITING_CONFIRMATION -> "확인 대기"
+            VoiceFlowState.WAITING_GRASP_CONFIRMATION -> "파지 확인 대기"
             VoiceFlowState.SEARCHING_PRODUCT -> "탐색 중"
             VoiceFlowState.SEARCH_RESULT -> "탐색 결과"
             VoiceFlowState.SEARCH_FAILED -> "탐색 실패"
