@@ -8,6 +8,7 @@
     "seed": "node seed.js",
     "seed-dimensions": "node seed-dimensions.js",
     "add-size-field": "node add-size-field.js",
+    "upsert-widths": "node upsert-product-widths.js",
     "upload": "node upload.js"
   },
   "dependencies": {
