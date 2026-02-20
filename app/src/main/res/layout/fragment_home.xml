@@ -43,7 +43,7 @@
                 android:textColor="#FFFFFF"
                 android:textSize="18sp"
                 android:visibility="gone"
-                tools:text="약 45cm"
+                tools:text="방향: 우측 상단  거리: 52cm"
                 tools:visibility="visible" />
 
         </FrameLayout>

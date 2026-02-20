@@ -139,7 +139,7 @@ class HomeFragment : Fragment() {
     private val REACH_STABILITY_FRAMES = 5
     private var reachDistanceFrameCount = 0
     private val FOCAL_LENGTH_FACTOR = 1.1f   // pinhole: focal along width = imageWidth * this (박스 가로와 동일 축)
-    private val DISTANCE_CALIBRATION_FACTOR = 1.0f   // 거리 보정 (1.0 = 보정 없음)
+    private val DISTANCE_CALIBRATION_FACTOR = 1.3f   // 거리 보정 (실제보다 가깝게 나올 때 값 키움)
     /** 55cm: 손에 잡을 수 있는 거리. 이하일 때 진동+음성 "손을 뻗어 확인해보세요" */
     private val REACH_DISTANCE_MM = 550f
 
@@ -197,11 +197,24 @@ class HomeFragment : Fragment() {
     /** 비정면 구역 감지(구역 변경 즉시 안내용) 재검사 간격. 짧을수록 포지션 변경 감지 빠름 */
     private val POSITION_ANNOUNCE_NON_CENTER_POLL_MS = 400L
     private var positionAnnounceRunnable: Runnable? = null
-    private var lastPositionAnnounceEnqueueTimeMs = 0L
     private var positionAnnounceStabilitySatisfied = false
     private var lastPositionStabilityRefRect: RectF? = null
     private var lastLargeMovementTime = 0L
     private var lastAnnouncedZone: String? = null
+    /** 정면일 때만 사용. 55cm 이하(true) / 초과(false). 비정면이면 null */
+    private var lastAnnouncedInReach: Boolean? = null
+    /** 방향·거리: 한 곳(프레임)에서만 갱신하는 현재 값 */
+    private var currentZone: String? = null
+    private var currentDistMm: Float = 0f
+    /** 정면일 때만 55cm 이하 여부. 비정면이면 null */
+    private var currentInReach: Boolean? = null
+    /** 구역이 이 시간(ms) 동안 동일해야 안내. 짧을수록 우측→우측상단 등 전환 시 말 잘 나옴. 너무 짧으면 경계에서 플립플롭 시 잔말 많음 */
+    private val ZONE_STABLE_MS = 200L
+    private var pendingAnnounceZone: String? = null
+    private var pendingAnnounceInReach: Boolean? = null
+    private var pendingAnnounceSinceMs = 0L
+    /** 상태 로그 쓰로틀용 (원인 파악용) */
+    private var lastPositionStateLogMs = 0L
     private var voiceSearchTargetLabel: String? = null
     /** 마이페이지/관리자에서 상품 선택 후 홈 진입 시, TTS 준비되면 재생·탐지 (TTS 비동기 초기화 대응) */
     private var pendingSearchTarget: String? = null
@@ -468,13 +481,24 @@ class HomeFragment : Fragment() {
      * @param isAutoGuidance true면 STT 대화 직후 4초 breathing room 동안 무시(Drop).
      * onDone은 마지막 인자로 두어 trailing lambda 사용 가능. */
     private fun speak(text: String, urgent: Boolean = true, isAutoGuidance: Boolean = true, onDone: (() -> Unit)? = null) {
-        if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
-        if (isAutoGuidance && (voiceFlowController?.isInSttBreathingRoom() == true)) return
-        if (!urgent && (waitingForTouchConfirm || touchConfirmInProgress || (sttManager?.isListening() == true))) return
+        if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            Log.d(TAG, "speak DROPPED lifecycle not RESUMED msg=${text.take(40)}")
+            return
+        }
+        if (isAutoGuidance && (voiceFlowController?.isInSttBreathingRoom() == true)) {
+            Log.d(TAG, "speak DROPPED isInSttBreathingRoom msg=${text.take(40)}")
+            return
+        }
+        if (!urgent && (waitingForTouchConfirm || touchConfirmInProgress || (sttManager?.isListening() == true))) {
+            Log.d(TAG, "speak DROPPED !urgent waitTouch=$waitingForTouchConfirm touchConfirm=$touchConfirmInProgress sttListening=${sttManager?.isListening()} msg=${text.take(40)}")
+            return
+        }
         beepPlayer?.stopProximityBeep()
         if (urgent) {
+            Log.d(TAG, "speak FLUSH msg=${text.take(50)}")
             ttsManager?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, onDone)
         } else {
+            Log.d(TAG, "speak ENQUEUE msg=${text.take(50)}")
             ttsGuidanceQueue?.enqueue(text, TtsPriorityQueue.PRIORITY_NORMAL)
         }
     }
@@ -963,22 +987,22 @@ class HomeFragment : Fragment() {
         searchTimeoutRunnable = null
     }
 
+    /** 위치 안내: 방향/거리·즉시 안내는 프레임에서 처리. runnable은 15초 주기 알림만. */
     private fun startPositionAnnounce() {
         stopPositionAnnounce()
-        lastPositionAnnounceEnqueueTimeMs = 0L
-        lastPositionPeriodicReminderMs = System.currentTimeMillis()  // 첫 15초 주기 알림은 락 후 15초 뒤
-        positionAnnounceStabilitySatisfied = false
-        lastPositionStabilityRefRect = null
-        lastLargeMovementTime = 0L
+        lastPositionPeriodicReminderMs = System.currentTimeMillis()
         lastAnnouncedZone = null
+        lastAnnouncedInReach = null
+        pendingAnnounceZone = null
+        pendingAnnounceInReach = null
+        pendingAnnounceSinceMs = 0L
         positionAnnounceRunnable = object : Runnable {
             override fun run() {
                 if (waitingForTouchConfirm) {
-                    searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_INTERVAL_MS)
+                    searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_NON_CENTER_POLL_MS)
                     return
                 }
-                val box = frozenBox
-                if (box == null) {
+                val box = frozenBox ?: run {
                     searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_NON_CENTER_POLL_MS)
                     return
                 }
@@ -989,100 +1013,80 @@ class HomeFragment : Fragment() {
                     return
                 }
                 val now = System.currentTimeMillis()
-                val rect = box.rect
-                val distMm = computeDistanceMm(box.rect.width(), w, lockedTargetLabel, currentZoomRatio)
-                updateDistanceDisplay(distMm)
-                val currentZone = voiceFlowController?.getZoneName(rect, w, h)
-                // 15초마다 한 번씩 주기 알림 (못 들을 수 있으므로 상태와 무관하게)
                 if (now - lastPositionPeriodicReminderMs >= POSITION_PERIODIC_REMINDER_MS) {
                     lastPositionPeriodicReminderMs = now
-                    val periodicMsg = if (currentZone == "정면") {
+                    val zone = currentZone
+                    val distMm = currentDistMm
+                    val periodicMsg = if (zone == "정면") {
                         voiceFlowController?.getCenterDistanceMessage(distMm)
                             ?: "상품이 정면에 있습니다. 방향을 유지한 채 앞으로 걸어가세요."
                     } else {
                         val displayName = if (ProductDictionary.isLoaded()) ProductDictionary.getDisplayNameKo(lockedTargetLabel) else lockedTargetLabel
                         voiceFlowController?.getPositionAnnounceMessage(displayName, box.rect, w, h, distMm)
                     }
-                    if (!periodicMsg.isNullOrBlank()) speak(periodicMsg, urgent = false)
+                    if (!periodicMsg.isNullOrBlank()) speak(periodicMsg, urgent = true, isAutoGuidance = false)
                 }
-                // 구역이 바뀌면 즉시 안내 (우측 → 좌측/정면 등)
-                val allowByZoneChangeInstant = (currentZone != null && currentZone != lastAnnouncedZone)
-                // 정면 + 55cm 이하: 진동+멘트는 processDistanceGuidance에서만 한 세트로 처리. 여기서는 상태만 갱신 후 스킵
-                if (distMm <= REACH_DISTANCE_MM && !allowByZoneChangeInstant) {
-                    if (currentZone == "정면") {
-                        lastAnnouncedZone = currentZone
-                        lastPositionAnnounceEnqueueTimeMs = now
-                    }
-                    searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_INTERVAL_MS)
-                    return
-                }
-
-                // 오류2: 구역이 막 바뀌었으면 1초 안정 없이도 즉시 안내. 그 외에는 1초간 큰 움직임 없을 때까지 안내 대기
-                if (!allowByZoneChangeInstant && !positionAnnounceStabilitySatisfied) {
-                    val ref = lastPositionStabilityRefRect
-                    if (ref == null) {
-                        lastPositionStabilityRefRect = RectF(rect)
-                        lastLargeMovementTime = now
-                        searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_STABILITY_CHECK_MS)
-                        return
-                    }
-                    val dx = (rect.centerX() - ref.centerX()) / w.coerceAtLeast(1)
-                    val dy = (rect.centerY() - ref.centerY()) / h.coerceAtLeast(1)
-                    val moveNorm = kotlin.math.sqrt(dx * dx + dy * dy)
-                    if (moveNorm >= POSITION_ANNOUNCE_MOVEMENT_THRESHOLD_NORM) {
-                        lastLargeMovementTime = now
-                        lastPositionStabilityRefRect = RectF(rect)
-                        searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_STABILITY_CHECK_MS)
-                        return
-                    }
-                    if (now - lastLargeMovementTime < POSITION_ANNOUNCE_STABILITY_MS) {
-                        searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_STABILITY_CHECK_MS)
-                        return
-                    }
-                    positionAnnounceStabilitySatisfied = true
-                }
-
-                // 비정면(우측 등): 한 번 안내 후 같은 구역이면 5초 동안 변동 없을 때만 재알림. 구역 바뀌면 즉시 안내.
-                val allowBySameZoneRemind = (currentZone != "정면" && currentZone == lastAnnouncedZone &&
-                    (now - lastPositionAnnounceEnqueueTimeMs >= POSITION_ANNOUNCE_SAME_ZONE_REMIND_MS))
-                val allowByCenterGap = (currentZone == "정면" && (now - lastPositionAnnounceEnqueueTimeMs >= POSITION_ANNOUNCE_MIN_GAP_MS))
-                val mayAnnounce = allowByZoneChangeInstant || allowBySameZoneRemind || allowByCenterGap
-                if (!mayAnnounce) {
-                    searchTimeoutHandler.postDelayed(this, if (currentZone == "정면") POSITION_ANNOUNCE_INTERVAL_MS else POSITION_ANNOUNCE_NON_CENTER_POLL_MS)
-                    return
-                }
-
-                // 정면: 55cm 초과일 때만 주기 안내("방향 유지한 채 걸어가세요"). 55cm 이하 진동+멘트는 processDistanceGuidance 한 세트만 사용
-                if (currentZone == "정면") {
-                    if (distMm > REACH_DISTANCE_MM) {
-                        val centerMsg = voiceFlowController?.getCenterDistanceMessage(distMm)
-                            ?: "상품이 정면에 있습니다. 방향을 유지한 채 앞으로 걸어가세요."
-                        speak(centerMsg, urgent = false)
-                    }
-                    lastPositionAnnounceEnqueueTimeMs = now
-                    lastAnnouncedZone = currentZone
-                    searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_INTERVAL_MS)
-                    return
-                }
-                val displayName = if (ProductDictionary.isLoaded())
-                    ProductDictionary.getDisplayNameKo(lockedTargetLabel) else lockedTargetLabel
-                val message = voiceFlowController?.getPositionAnnounceMessage(displayName, box.rect, w, h, distMm)
-                if (message == null) {
-                    searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_NON_CENTER_POLL_MS)
-                    return
-                }
-                speak(message, urgent = false)
-                lastPositionAnnounceEnqueueTimeMs = now
-                lastAnnouncedZone = currentZone
                 searchTimeoutHandler.postDelayed(this, POSITION_ANNOUNCE_NON_CENTER_POLL_MS)
             }
         }
-        searchTimeoutHandler.postDelayed(positionAnnounceRunnable!!, POSITION_ANNOUNCE_STABILITY_CHECK_MS)
+        searchTimeoutHandler.post(positionAnnounceRunnable!!)
+    }
+
+    /** LOCKED 시 매 프레임: 방향·거리 변수 갱신, 화면 표시, 구역이 ZONE_STABLE_MS 동안 안정되면 안내. */
+    private fun updatePositionStateAndAnnounceIfStable() {
+        val box = frozenBox ?: return
+        val w = frozenImageWidth
+        val h = frozenImageHeight
+        if (w <= 0 || h <= 0) return
+        val rect = box.rect
+        val zone = voiceFlowController?.getZoneName(rect, w, h) ?: return
+        val distMm = computeDistanceMm(box.rect.width(), w, lockedTargetLabel, currentZoomRatio)
+        val inReach = if (zone == "정면") distMm <= REACH_DISTANCE_MM else null
+
+        currentZone = zone
+        currentDistMm = distMm
+        currentInReach = inReach
+        updateDistanceDisplay(zone, distMm)
+
+        val now = System.currentTimeMillis()
+        val stateKey = Pair(zone, inReach)
+        val pendingKey = Pair(pendingAnnounceZone, pendingAnnounceInReach)
+        if (stateKey != pendingKey) {
+            Log.d(TAG, "PositionAnnounce: PENDING_RESET zone=$zone inReach=$inReach prevPendingZone=$pendingAnnounceZone prevPendingInReach=$pendingAnnounceInReach")
+            pendingAnnounceZone = zone
+            pendingAnnounceInReach = inReach
+            pendingAnnounceSinceMs = now
+        }
+        val elapsed = now - pendingAnnounceSinceMs
+        val stable = stateKey == pendingKey && elapsed >= ZONE_STABLE_MS
+        val lastKey = Pair(lastAnnouncedZone, lastAnnouncedInReach)
+        val shouldAnnounce = stable && stateKey != lastKey
+
+        if (now - lastPositionStateLogMs >= 250L) {
+            Log.d(TAG, "PositionAnnounce: state zone=$zone pendingZone=$pendingAnnounceZone elapsed=${elapsed}ms stable=$stable lastAnnouncedZone=$lastAnnouncedZone shouldAnnounce=$shouldAnnounce")
+            lastPositionStateLogMs = now
+        }
+
+        if (shouldAnnounce) {
+            val prevLastZone = lastAnnouncedZone
+            lastAnnouncedZone = zone
+            lastAnnouncedInReach = inReach
+            val message = if (zone == "정면") {
+                voiceFlowController?.getCenterDistanceMessage(distMm)
+                    ?: "상품이 정면에 있습니다. 방향을 유지한 채 앞으로 걸어가세요."
+            } else {
+                val displayName = if (ProductDictionary.isLoaded()) ProductDictionary.getDisplayNameKo(lockedTargetLabel) else lockedTargetLabel
+                voiceFlowController?.getPositionAnnounceMessage(displayName, box.rect, w, h, distMm)
+            }
+            Log.d(TAG, "PositionAnnounce: ANNOUNCE zone=$zone prevLastZone=$prevLastZone speak message=${message?.take(80)}")
+            if (!message.isNullOrBlank()) speak(message, urgent = true, isAutoGuidance = false)
+        }
     }
 
     private fun stopPositionAnnounce() {
         positionAnnounceRunnable?.let { searchTimeoutHandler.removeCallbacks(it) }
         positionAnnounceRunnable = null
+        updateDistanceDisplay(null, null)
     }
 
     private fun initGyroTrackingManager() {
@@ -1165,9 +1169,16 @@ class HomeFragment : Fragment() {
         return rawDistanceMm * DISTANCE_CALIBRATION_FACTOR
     }
 
-    /** 거리 TextView는 디버깅용으로만 쓰였으므로 항상 숨김. */
-    private fun updateDistanceDisplay(@Suppress("UNUSED_PARAMETER") distMm: Float?) {
-        _binding?.distanceCmText?.visibility = View.GONE
+    /** 락 시 화면 상단에 방향(구역)+거리 표시. zone/distMm 둘 중 null이면 숨김. */
+    private fun updateDistanceDisplay(zone: String?, distMm: Float?) {
+        val tv = _binding?.distanceCmText ?: return
+        if (zone == null || distMm == null) {
+            tv.visibility = View.GONE
+            return
+        }
+        val cm = (distMm / 10f).toInt().coerceAtLeast(0)
+        tv.text = "방향: $zone  거리: ${cm}cm"
+        tv.visibility = View.VISIBLE
     }
 
     /** 1순위: 방향(9구역) → 2순위: 5초 모드 락 → 3순위: 거리(55cm 손 뻗기). */
@@ -1183,7 +1194,8 @@ class HomeFragment : Fragment() {
             val boxWidthPx = box.rect.width()
             val zoomRatio = currentZoomRatio
             val distMm = computeDistanceMm(boxWidthPx, imageWidth, box.label, zoomRatio)
-            updateDistanceDisplay(distMm)
+            val zone = voiceFlowController?.getZoneName(box.rect, imageWidth, imageHeight)
+            updateDistanceDisplay(zone, distMm)
 
             if (voiceFlowController?.isInSttBreathingRoom() == true) return@runOnUiThread
 
@@ -1400,9 +1412,9 @@ class HomeFragment : Fragment() {
                 hasAnnouncedDetectedThisSearchSession = true
                 lastFoundAnnounceTimeMs = nowMs
                 lastFoundAnnounceLabel = actualLabel
-                vibrateFeedback()
                 val distMm = computeDistanceMm(box.rect.width(), imageWidth, lockedTargetLabel, currentZoomRatio)
-                updateDistanceDisplay(distMm)
+                val zone = voiceFlowController?.getZoneName(box.rect, imageWidth, imageHeight)
+                updateDistanceDisplay(zone, distMm)
                 val displayNameForPos = if (ProductDictionary.isLoaded()) ProductDictionary.getDisplayNameKo(lockedTargetLabel) else lockedTargetLabel
                 val positionMsg = voiceFlowController?.getPositionAnnounceMessage(displayNameForPos, box.rect, imageWidth, imageHeight, distMm)
                 if (!positionMsg.isNullOrBlank()) speak(positionMsg)
@@ -1468,7 +1480,7 @@ class HomeFragment : Fragment() {
             gyroManager.stopTracking()
             binding.overlayView.setDetections(emptyList(), 0, 0)
             binding.overlayView.setFrozen(false)
-            updateDistanceDisplay(null)
+            updateDistanceDisplay(null, null)
             updateSearchTargetLabel()
             stopHandGuidanceTTS()
             startScanning()
@@ -2416,6 +2428,16 @@ class HomeFragment : Fragment() {
                                     gyroManager.resetToSearchingFromUI()
                                 }
                             }
+                        } else {
+                            // 검증 프레임이 아니어도 optical flow로 박스 위치를 매 프레임 갱신 → 위치 안내(중앙/왼쪽 등)가 즉시 반영되도록
+                            val flow = opticalFlowTracker.update(bitmap, null, frozenBox?.rect)
+                            flow?.let { (dx, dy) ->
+                                val box = frozenBox ?: return@let
+                                val r = box.rect
+                                val newRect = RectF(r.left + dx, r.top + dy, r.right + dx, r.bottom + dy)
+                                gyroManager.correctPosition(newRect)
+                                frozenBox = box.copy(rect = newRect)
+                            }
                         }
                     }
                     wasOccluded = handsOverlap
@@ -2423,6 +2445,7 @@ class HomeFragment : Fragment() {
                     frozenBox?.let { processDistanceGuidance(it, frozenImageWidth, frozenImageHeight) }
                     val boxes = if (frozenBox != null) listOf(frozenBox!!) else emptyList()
                     displayResults(boxes, inferMs, frozenImageWidth, frozenImageHeight)
+                    requireActivity().runOnUiThread { updatePositionStateAndAnnounceIfStable() }
                 }
             }
             imageProxy.close()
