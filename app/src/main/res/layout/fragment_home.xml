@@ -30,22 +30,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <!-- 거리 표시 (락 시 갱신) -->
-            <TextView
-                android:id="@+id/distanceCmText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="top|center_horizontal"
-                android:layout_marginTop="24dp"
-                android:background="#CC000000"
-                android:paddingHorizontal="16dp"
-                android:paddingVertical="8dp"
-                android:textColor="#FFFFFF"
-                android:textSize="18sp"
-                android:visibility="gone"
-                tools:text="방향: 우측 상단  거리: 52cm"
-                tools:visibility="visible" />
-
         </FrameLayout>
 
         <!-- 앱 시작 시 정중앙 시작하기 버튼 (탭 시 숨김) -->

@@ -139,7 +139,7 @@ class HomeFragment : Fragment() {
     private val REACH_STABILITY_FRAMES = 5
     private var reachDistanceFrameCount = 0
     private val FOCAL_LENGTH_FACTOR = 1.1f   // pinhole: focal along width = imageWidth * this (박스 가로와 동일 축)
-    private val DISTANCE_CALIBRATION_FACTOR = 1.3f   // 거리 보정 (실제보다 가깝게 나올 때 값 키움)
+    private val DISTANCE_CALIBRATION_FACTOR = 1f   // 거리 보정 (표준: 보정 없음)
     /** 55cm: 손에 잡을 수 있는 거리. 이하일 때 진동+음성 "손을 뻗어 확인해보세요" */
     private val REACH_DISTANCE_MM = 550f
 
@@ -481,24 +481,13 @@ class HomeFragment : Fragment() {
      * @param isAutoGuidance true면 STT 대화 직후 4초 breathing room 동안 무시(Drop).
      * onDone은 마지막 인자로 두어 trailing lambda 사용 가능. */
     private fun speak(text: String, urgent: Boolean = true, isAutoGuidance: Boolean = true, onDone: (() -> Unit)? = null) {
-        if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-            Log.d(TAG, "speak DROPPED lifecycle not RESUMED msg=${text.take(40)}")
-            return
-        }
-        if (isAutoGuidance && (voiceFlowController?.isInSttBreathingRoom() == true)) {
-            Log.d(TAG, "speak DROPPED isInSttBreathingRoom msg=${text.take(40)}")
-            return
-        }
-        if (!urgent && (waitingForTouchConfirm || touchConfirmInProgress || (sttManager?.isListening() == true))) {
-            Log.d(TAG, "speak DROPPED !urgent waitTouch=$waitingForTouchConfirm touchConfirm=$touchConfirmInProgress sttListening=${sttManager?.isListening()} msg=${text.take(40)}")
-            return
-        }
+        if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        if (isAutoGuidance && (voiceFlowController?.isInSttBreathingRoom() == true)) return
+        if (!urgent && (waitingForTouchConfirm || touchConfirmInProgress || (sttManager?.isListening() == true))) return
         beepPlayer?.stopProximityBeep()
         if (urgent) {
-            Log.d(TAG, "speak FLUSH msg=${text.take(50)}")
             ttsManager?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, onDone)
         } else {
-            Log.d(TAG, "speak ENQUEUE msg=${text.take(50)}")
             ttsGuidanceQueue?.enqueue(text, TtsPriorityQueue.PRIORITY_NORMAL)
         }
     }
@@ -1046,13 +1035,11 @@ class HomeFragment : Fragment() {
         currentZone = zone
         currentDistMm = distMm
         currentInReach = inReach
-        updateDistanceDisplay(zone, distMm)
 
         val now = System.currentTimeMillis()
         val stateKey = Pair(zone, inReach)
         val pendingKey = Pair(pendingAnnounceZone, pendingAnnounceInReach)
         if (stateKey != pendingKey) {
-            Log.d(TAG, "PositionAnnounce: PENDING_RESET zone=$zone inReach=$inReach prevPendingZone=$pendingAnnounceZone prevPendingInReach=$pendingAnnounceInReach")
             pendingAnnounceZone = zone
             pendingAnnounceInReach = inReach
             pendingAnnounceSinceMs = now
@@ -1062,13 +1049,9 @@ class HomeFragment : Fragment() {
         val lastKey = Pair(lastAnnouncedZone, lastAnnouncedInReach)
         val shouldAnnounce = stable && stateKey != lastKey
 
-        if (now - lastPositionStateLogMs >= 250L) {
-            Log.d(TAG, "PositionAnnounce: state zone=$zone pendingZone=$pendingAnnounceZone elapsed=${elapsed}ms stable=$stable lastAnnouncedZone=$lastAnnouncedZone shouldAnnounce=$shouldAnnounce")
-            lastPositionStateLogMs = now
-        }
+        if (now - lastPositionStateLogMs >= 250L) lastPositionStateLogMs = now
 
         if (shouldAnnounce) {
-            val prevLastZone = lastAnnouncedZone
             lastAnnouncedZone = zone
             lastAnnouncedInReach = inReach
             val message = if (zone == "정면") {
@@ -1078,7 +1061,6 @@ class HomeFragment : Fragment() {
                 val displayName = if (ProductDictionary.isLoaded()) ProductDictionary.getDisplayNameKo(lockedTargetLabel) else lockedTargetLabel
                 voiceFlowController?.getPositionAnnounceMessage(displayName, box.rect, w, h, distMm)
             }
-            Log.d(TAG, "PositionAnnounce: ANNOUNCE zone=$zone prevLastZone=$prevLastZone speak message=${message?.take(80)}")
             if (!message.isNullOrBlank()) speak(message, urgent = true, isAutoGuidance = false)
         }
     }
@@ -1086,7 +1068,6 @@ class HomeFragment : Fragment() {
     private fun stopPositionAnnounce() {
         positionAnnounceRunnable?.let { searchTimeoutHandler.removeCallbacks(it) }
         positionAnnounceRunnable = null
-        updateDistanceDisplay(null, null)
     }
 
     private fun initGyroTrackingManager() {
@@ -1169,18 +1150,6 @@ class HomeFragment : Fragment() {
         return rawDistanceMm * DISTANCE_CALIBRATION_FACTOR
     }
 
-    /** 락 시 화면 상단에 방향(구역)+거리 표시. zone/distMm 둘 중 null이면 숨김. */
-    private fun updateDistanceDisplay(zone: String?, distMm: Float?) {
-        val tv = _binding?.distanceCmText ?: return
-        if (zone == null || distMm == null) {
-            tv.visibility = View.GONE
-            return
-        }
-        val cm = (distMm / 10f).toInt().coerceAtLeast(0)
-        tv.text = "방향: $zone  거리: ${cm}cm"
-        tv.visibility = View.VISIBLE
-    }
-
     /** 1순위: 방향(9구역) → 2순위: 5초 모드 락 → 3순위: 거리(55cm 손 뻗기). */
     private fun processDistanceGuidance(box: OverlayView.DetectionBox, imageWidth: Int, imageHeight: Int) {
         if (waitingForTouchConfirm || touchConfirmInProgress) return
@@ -1195,7 +1164,6 @@ class HomeFragment : Fragment() {
             val zoomRatio = currentZoomRatio
             val distMm = computeDistanceMm(boxWidthPx, imageWidth, box.label, zoomRatio)
             val zone = voiceFlowController?.getZoneName(box.rect, imageWidth, imageHeight)
-            updateDistanceDisplay(zone, distMm)
 
             if (voiceFlowController?.isInSttBreathingRoom() == true) return@runOnUiThread
 
@@ -1242,6 +1210,8 @@ class HomeFragment : Fragment() {
                         vibrateFeedback(400L)
                         lastVibrateTimeMs = now
                         if (distanceMm <= REACH_DISTANCE_MM) reachAnnouncedThisSession = true
+                        lastAnnouncedZone = "정면"
+                        lastAnnouncedInReach = distanceMm <= REACH_DISTANCE_MM
                     }
                     when {
                         distanceMm <= REACH_DISTANCE_MM -> {
@@ -1254,6 +1224,8 @@ class HomeFragment : Fragment() {
                                     reachAnnouncedThisSession = true
                                     reachDistanceFrameCount = 0
                                     speak("상품이 정면에 있습니다. 손을 뻗어 확인해보세요.", urgent = true)
+                                    lastAnnouncedZone = "정면"
+                                    lastAnnouncedInReach = true
                                     if (now - lastVibrateTimeMs >= VIBRATE_COOLDOWN_MS) {
                                         vibrateFeedback(400L)
                                         lastVibrateTimeMs = now
@@ -1269,12 +1241,16 @@ class HomeFragment : Fragment() {
                                 lastDirectionGuidanceTime = now
                                 val msg = voiceFlowController?.getCenterDistanceMessage(distMm)
                                     ?: "상품이 정면에 있습니다. 방향을 유지한 채 앞으로 걸어가세요."
-                                speak(msg, false)
-                            } else if (!justEnteredCenter && now - lastDirectionGuidanceTime >= DIRECTION_GUIDANCE_COOLDOWN_MS) {
+                                speak(msg, urgent = true, isAutoGuidance = false)
+                                lastAnnouncedZone = "정면"
+                                lastAnnouncedInReach = false
+                            } else if (!justEnteredCenter && lastAnnouncedZone != "정면" && now - lastDirectionGuidanceTime >= DIRECTION_GUIDANCE_COOLDOWN_MS) {
                                 lastDirectionGuidanceTime = now
                                 val msg = voiceFlowController?.getCenterDistanceMessage(distMm)
                                     ?: "상품이 정면에 있습니다. 방향을 유지한 채 앞으로 걸어가세요."
-                                speak(msg, false)
+                                speak(msg, urgent = true, isAutoGuidance = false)
+                                lastAnnouncedZone = "정면"
+                                lastAnnouncedInReach = false
                             }
                         }
                     }
@@ -1407,6 +1383,8 @@ class HomeFragment : Fragment() {
                 (nowMs - lastFoundAnnounceTimeMs) < FOUND_ANNOUNCE_COOLDOWN_MS
             val shouldAnnounceDetected = (!hasAnnouncedDetectedThisSearchSession ||
                 searchDurationMs >= MIN_SEARCH_DURATION_BEFORE_DETECTED_TTS_MS) && !sameTargetRecently
+            var announcedZone: String? = null
+            var announcedInReach: Boolean? = null
             if (shouldAnnounceDetected && !ttsDetectedPlayed) {
                 ttsDetectedPlayed = true
                 hasAnnouncedDetectedThisSearchSession = true
@@ -1414,10 +1392,13 @@ class HomeFragment : Fragment() {
                 lastFoundAnnounceLabel = actualLabel
                 val distMm = computeDistanceMm(box.rect.width(), imageWidth, lockedTargetLabel, currentZoomRatio)
                 val zone = voiceFlowController?.getZoneName(box.rect, imageWidth, imageHeight)
-                updateDistanceDisplay(zone, distMm)
                 val displayNameForPos = if (ProductDictionary.isLoaded()) ProductDictionary.getDisplayNameKo(lockedTargetLabel) else lockedTargetLabel
                 val positionMsg = voiceFlowController?.getPositionAnnounceMessage(displayNameForPos, box.rect, imageWidth, imageHeight, distMm)
-                if (!positionMsg.isNullOrBlank()) speak(positionMsg)
+                if (!positionMsg.isNullOrBlank()) {
+                    speak(positionMsg)
+                    announcedZone = zone
+                    announcedInReach = if (zone == "정면") distMm <= REACH_DISTANCE_MM else null
+                }
             }
             if (fromVoice) {
                 val requested = voiceSearchTargetLabel
@@ -1428,6 +1409,14 @@ class HomeFragment : Fragment() {
                 }
             }
             startPositionAnnounce()
+            // 방금 구역 안내를 했으면, updatePositionStateAndAnnounceIfStable()에서 같은 구역을 다시 말하지 않도록 기록
+            if (announcedZone != null) {
+                lastAnnouncedZone = announcedZone
+                lastAnnouncedInReach = announcedInReach
+                pendingAnnounceZone = announcedZone
+                pendingAnnounceInReach = announcedInReach
+                pendingAnnounceSinceMs = System.currentTimeMillis()
+            }
         }
     }
 
@@ -1480,7 +1469,6 @@ class HomeFragment : Fragment() {
             gyroManager.stopTracking()
             binding.overlayView.setDetections(emptyList(), 0, 0)
             binding.overlayView.setFrozen(false)
-            updateDistanceDisplay(null, null)
             updateSearchTargetLabel()
             stopHandGuidanceTTS()
             startScanning()
