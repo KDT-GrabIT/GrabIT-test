@@ -20,7 +20,17 @@ data class ProductProximityDoc(
     @SerializedName("class_id") val classId: String = "",
     @SerializedName("display_name") val displayName: String = "",
     @SerializedName("proximity_words") val proximityWords: List<String> = emptyList(),
+    /** 현재 DB 스키마: 문서 최상단 width (cm) */
+    @SerializedName("width") val width: Float? = null,
+    /** 서버 DB의 상품 치수(size). width/length/height는 문자열 또는 빈값으로 내려올 수 있음 */
+    @SerializedName("size") val size: ProductSize? = null,
     @SerializedName("type") val type: String = "product"
+)
+
+data class ProductSize(
+    @SerializedName("width") val width: String? = null,
+    @SerializedName("length") val length: String? = null,
+    @SerializedName("height") val height: String? = null
 )
 
 /** API 응답: 대답 목록 */
@@ -31,4 +41,17 @@ data class AnswerProximityResponse(
 /** API 응답: 상품 목록 */
 data class ProductProximityResponse(
     @SerializedName("items") val items: List<ProductProximityDoc> = emptyList()
+)
+
+/** Product dimensions payload from /product-dimensions */
+data class ProductDimensionDoc(
+    @SerializedName("class_id") val classId: String = "",
+    @SerializedName("display_name") val displayName: String? = null,
+    @SerializedName("width") val width: Float? = null,
+    @SerializedName("width_cm") val widthCm: Float? = null,
+    @SerializedName("size") val size: ProductSize? = null
+)
+
+data class ProductDimensionResponse(
+    @SerializedName("items") val items: List<ProductDimensionDoc> = emptyList()
 )

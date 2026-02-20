@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 const DB_NAME = 'grabit';
 const COL_ANSWERS = 'answer_synonyms';
 const COL_PRODUCTS = 'product_synonyms';
+const COL_DIMENSIONS = 'product_dimensions';
 const E5_SERVICE_URL = process.env.E5_SERVICE_URL || 'http://localhost:5000';
 
 app.use(cors());
@@ -77,6 +78,51 @@ app.get('/synonyms/products', async (req, res) => {
 });
 
 // (선택) e5 유사검색: GET /synonyms/search?q=검색어&top_k=5
+// 상품 치수 (meta.xml 상단 width/length/height) — barcd 기준 조회
+app.get('/product-dimensions', async (req, res) => {
+  try {
+    const database = await getDb();
+    if (!database) return res.json({ items: [] });
+    const col = database.collection(COL_DIMENSIONS);
+    const barcd = (req.query.barcd || '').trim();
+    let items;
+    if (barcd) {
+      const one = await col.findOne({ barcd });
+      items = one ? [one] : [];
+    } else {
+      items = await col.find({}).toArray();
+    }
+    res.json({ items });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message, items: [] });
+  }
+});
+
+// 상품 치수 일괄 저장 (시드 스크립트 또는 관리용)
+app.post('/product-dimensions', async (req, res) => {
+  try {
+    const database = await getDb();
+    if (!database) return res.status(503).json({ error: 'MongoDB 연결 없음' });
+    const col = database.collection(COL_DIMENSIONS);
+    const body = req.body;
+    const list = Array.isArray(body) ? body : (body.items || []);
+    if (list.length === 0) return res.json({ ok: true, count: 0 });
+    const ops = list.map(doc => ({
+      updateOne: {
+        filter: { barcd: doc.barcd },
+        update: { $set: { ...doc, barcd: doc.barcd } },
+        upsert: true
+      }
+    }));
+    const result = await col.bulkWrite(ops);
+    res.json({ ok: true, count: result.upsertedCount + result.modifiedCount });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/synonyms/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   const topK = Math.min(parseInt(req.query.top_k, 10) || 5, 50);

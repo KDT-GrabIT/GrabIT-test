@@ -10,7 +10,12 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModelProvider
+import com.example.grabitTest.data.synonym.SynonymRepository
+import com.example.grabit_test.data.product.ProductDimensionRepository
+import com.example.grabit_test.data.sync.DataSyncManager
+import kotlinx.coroutines.launch
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import com.example.grabitTest.databinding.ActivityMainBinding
@@ -62,6 +67,13 @@ class MainActivity : AppCompatActivity() {
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars())
             view.setPadding(insets.left, insets.top, insets.right, 0)
             windowInsets
+        }
+
+        // Sync remote data once, then load local caches for runtime use.
+        lifecycleScope.launch {
+            DataSyncManager.syncAll(this@MainActivity)
+            SynonymRepository.loadFromLocal(this@MainActivity)
+            ProductDimensionRepository.loadFromLocal(this@MainActivity)
         }
     }
 

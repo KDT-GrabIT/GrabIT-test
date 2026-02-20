@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "seed": "node seed.js",
+    "seed-dimensions": "node seed-dimensions.js",
+    "add-size-field": "node add-size-field.js",
     "upload": "node upload.js"
   },
   "dependencies": {

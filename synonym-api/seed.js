@@ -26,13 +26,14 @@ function loadProductDictionary() {
       class_id: classId,
       display_name: v.tts_ko || classId,
       proximity_words: v.aliases && v.aliases.length ? v.aliases : [v.tts_ko || classId],
-      type: 'product'
+      type: 'product',
+      size: { width: '', length: '', height: '' }
     }));
   } catch (e) {
     console.warn('product_dictionary.json 로드 실패, 기본 상품만 삽입:', e.message);
     return [
-      { class_id: 'pocari_sweat_500ml', display_name: '포카리 스웨트', proximity_words: ['포카리', '포카리 스웨트'], type: 'product' },
-      { class_id: 'sprite_500ml', display_name: '스프라이트', proximity_words: ['스프라이트'], type: 'product' }
+      { class_id: 'pocari_sweat_500ml', display_name: '포카리 스웨트', proximity_words: ['포카리', '포카리 스웨트'], type: 'product', size: { width: '', length: '', height: '' } },
+      { class_id: 'sprite_500ml', display_name: '스프라이트', proximity_words: ['스프라이트'], type: 'product', size: { width: '', length: '', height: '' } }
     ];
   }
 }

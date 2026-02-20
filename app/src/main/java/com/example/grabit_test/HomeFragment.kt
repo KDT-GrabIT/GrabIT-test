@@ -31,6 +31,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import com.example.grabit_test.data.AppDatabase
+import com.example.grabit_test.data.product.ProductDimensionRepository
 import com.example.grabit_test.data.SearchHistoryRepository
 import com.example.grabit_test.data.history.SearchHistoryItem
 import com.example.grabitTest.data.synonym.SynonymRepository
@@ -391,7 +392,7 @@ class HomeFragment : Fragment() {
 
     private fun loadSynonymFromRemote() {
         CoroutineScope(Dispatchers.Main).launch {
-            withContext(Dispatchers.IO) { SynonymRepository.loadFromRemote() }
+            withContext(Dispatchers.IO) { SynonymRepository.loadFromLocal(requireContext().applicationContext) }
         }
     }
 
@@ -795,29 +796,32 @@ class HomeFragment : Fragment() {
     }
 
     private fun onStartSearchFromVoiceFlow(productName: String) {
-        val targetClass = mapSpokenToClass(productName)
-        if (productName.isNotBlank() && targetClass.isBlank()) {
-            voiceSearchTargetLabel = null
-            val failReason = "인식된 말을 상품 목록에서 찾지 못했어요. '$productName'"
-            speak(failReason) { speak(VoicePrompts.PROMPT_PRODUCT_RECOGNITION_FAILED) { } }
-            return
-        }
-        cancelSearchTimeout()
-        transitionToSearching(isNewSearchSession = true)
-        voiceSearchTargetLabel = targetClass
-        currentTargetLabel.set(targetClass)
-        startCamera()
-        startSearchTimeout()
-        // 검색 이력: 찾고 싶은 상품을 선택한 시점에 한 번만 저장
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-            val repo = SearchHistoryRepository(AppDatabase.getInstance(requireContext().applicationContext))
-            repo.insert(SearchHistoryItem(query = productName.trim(), classLabel = targetClass, searchedAt = System.currentTimeMillis(), source = "voice"))
+        viewLifecycleOwner.lifecycleScope.launch {
+            val targetClass = mapSpokenToClass(productName)
+            if (productName.isNotBlank() && targetClass.isBlank()) {
+                voiceSearchTargetLabel = null
+                val failReason = "인식된 말을 상품 목록에서 찾지 못했어요. '$productName'"
+                speak(failReason) { speak(VoicePrompts.PROMPT_PRODUCT_RECOGNITION_FAILED) { } }
+                return@launch
+            }
+            cancelSearchTimeout()
+            transitionToSearching(isNewSearchSession = true)
+            voiceSearchTargetLabel = targetClass
+            currentTargetLabel.set(targetClass)
+            startCamera()
+            startSearchTimeout()
+            // Search history is recorded once when a target is chosen.
+            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                val repo = SearchHistoryRepository(AppDatabase.getInstance(requireContext().applicationContext))
+                repo.insert(SearchHistoryItem(query = productName.trim(), classLabel = targetClass, searchedAt = System.currentTimeMillis(), source = "voice"))
+            }
         }
     }
 
-    private fun mapSpokenToClass(spoken: String): String {
+    private suspend fun mapSpokenToClass(spoken: String): String {
         if (spoken.isBlank()) return ""
         SynonymRepository.findClassByProximity(spoken)?.let { return it }
+        SynonymRepository.findClassByNameWithFallback(spoken)?.let { return it }
         ProductDictionary.findClassByStt(spoken)?.let { return it }
         val s = spoken.trim().lowercase().replace(" ", "")
         for (label in classLabels) {
@@ -828,9 +832,11 @@ class HomeFragment : Fragment() {
     }
 
     private fun setTargetFromSpokenProductName(productName: String) {
-        val targetClass = mapSpokenToClass(productName)
-        if (productName.isNotBlank() && targetClass.isBlank()) return
-        currentTargetLabel.set(targetClass)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val targetClass = mapSpokenToClass(productName)
+            if (productName.isNotBlank() && targetClass.isBlank()) return@launch
+            currentTargetLabel.set(targetClass)
+        }
     }
 
     private fun isShortYesLike(text: String): Boolean {
@@ -1145,7 +1151,9 @@ class HomeFragment : Fragment() {
         val zoom = zoomRatio.coerceAtLeast(0.1f)
         val realPixelWidth = boxWidthPx / zoom
         val focalLengthPx = imageWidth * FOCAL_LENGTH_FACTOR
-        val physicalWidthMm = ProductDictionary.getPhysicalWidthMm(label)
+        // 1) Local dimensions memory cache (synced from server), 2) fallback heuristic.
+        val physicalWidthMm = ProductDimensionRepository.getWidthMmByClassId(label)
+            ?: ProductDictionary.getPhysicalWidthMm(label)
         val rawDistanceMm = (focalLengthPx * physicalWidthMm) / realPixelWidth
         return rawDistanceMm * DISTANCE_CALIBRATION_FACTOR
     }

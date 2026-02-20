@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  e5-service:
+    build: ./e5-service
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+
+  backend:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
+      - E5_SERVICE_URL=http://e5-service:5000
+    depends_on:
+      - e5-service
+    restart: always

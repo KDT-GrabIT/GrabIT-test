@@ -8,7 +8,7 @@
 .externalNativeBuild
 .cxx
 local.properties
-
+/packeage-lock.json
 # Python (YOLOX 변환 등)
 venv/
 __pycache__/
@@ -17,6 +17,28 @@ __pycache__/
 .Python
 *.egg-info/
 .eggs/
+
+# 환경 변수 (API 키 등, 커밋하지 않음)
+.env
+.env.local
+*.env
+
+# 키 파일 (절대 업로드 금지)
+*.pem
+*.p12
+*.jks
+
+# Cursor IDE 설정 (개인 설정)
+.cursor/
+*.worktrees.json
+
+# Windows 배치 파일 (로컬 실행용, gradlew.bat 제외 - Gradle wrapper)
+*.bat
+!gradlew.bat
+
+# 대용량 파일 (상품 이미지 zip 등)
+상품 이미지/Training/*.zip
+상품 이미지/*.zip
 
 # 대용량 모델/export (필요 시 주석 해제)
 # *.pth

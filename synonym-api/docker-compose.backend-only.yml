@@ -1,0 +1,12 @@
+# e5-service 없이 Node 백엔드만 실행 (디스크 부족 시 사용)
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
+      - E5_SERVICE_URL=
+    restart: always

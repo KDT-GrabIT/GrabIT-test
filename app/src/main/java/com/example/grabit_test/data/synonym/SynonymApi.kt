@@ -6,6 +6,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
+import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
 /**
@@ -21,6 +22,15 @@ interface SynonymApi {
 
     @GET("synonyms/products")
     suspend fun getProductProximityWords(): ProductProximityResponse
+
+    @GET("product-dimensions")
+    suspend fun getProductDimensions(): ProductDimensionResponse
+
+    @GET("synonyms/search")
+    suspend fun searchProducts(
+        @Query("q") query: String,
+        @Query("top_k") topK: Int = 5
+    ): ProductProximityResponse
 
     companion object {
         private const val TIMEOUT_SEC = 15L
