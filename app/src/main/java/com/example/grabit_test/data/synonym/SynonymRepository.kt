@@ -20,6 +20,9 @@ object SynonymRepository {
 
     private const val TAG = "SynonymRepository"
     private const val LOCAL_FILE = "local_synonyms.json"
+    // TEMP: 임시 기본 너비(cm). 서버 width 누락/비정상 시 임시로 9cm 사용.
+    // TODO(temp): DB/서버 width 정합성 확보 후 이 기본값 로직 제거.
+    private const val TEMP_FALLBACK_WIDTH_CM = 9f
     private val gson = Gson()
 
     /** 기본 긍정 대답 (API 없을 때/API 항목 보강용) */
@@ -147,17 +150,29 @@ object SynonymRepository {
         rebuildProductWidthMap()
     }
 
-    /** 서버의 size.width(cm)를 mm로 변환해 classId별로 캐시 */
+    /** 서버의 size.width(cm)를 mm로 변환해 classId별로 캐시 (임시 기본값 포함) */
     private fun rebuildProductWidthMap() {
         val map = mutableMapOf<String, Float>()
         productProximityCache.values.forEach { doc ->
-            // 1순위: 현재 DB 스키마(최상단 width), 2순위: 이전 size.width
-            val widthCm = doc.width ?: doc.size?.width?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull()
-            if (widthCm != null && widthCm > 0f) {
+            // TEMP: 유효한 width가 없으면 임시 기본값(9cm) 적용
+            // TODO(temp): 서버 데이터 정리 후 기본값 대체 로직 제거.
+            val widthCm = parseWidthCm(doc.width)
+                ?: doc.size?.width?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull()
+                ?: TEMP_FALLBACK_WIDTH_CM
+            if (widthCm > 0f) {
                 map[doc.classId] = widthCm * 10f
             }
         }
         productWidthMmByClassId = map
+    }
+
+    private fun parseWidthCm(rawWidth: Any?): Float? {
+        return when (rawWidth) {
+            null -> null
+            is Number -> rawWidth.toFloat()
+            is String -> rawWidth.trim().takeIf { it.isNotEmpty() }?.toFloatOrNull()
+            else -> null
+        }?.takeIf { it.isFinite() && it > 0f }
     }
 
     private fun normalize(s: String): String = s.trim().replace(" ", "").lowercase()

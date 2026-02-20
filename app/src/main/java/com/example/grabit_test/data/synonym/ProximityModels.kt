@@ -20,8 +20,12 @@ data class ProductProximityDoc(
     @SerializedName("class_id") val classId: String = "",
     @SerializedName("display_name") val displayName: String = "",
     @SerializedName("proximity_words") val proximityWords: List<String> = emptyList(),
-    /** 현재 DB 스키마: 문서 최상단 width (cm) */
-    @SerializedName("width") val width: Float? = null,
+    /**
+     * 현재 DB 스키마: 문서 최상단 width (cm)
+     * 임시 안정화: 서버에서 width가 숫자/문자열/빈문자열 등으로 내려와도 파싱 에러를 피하기 위해 Any? 사용.
+     * TODO(temp): 서버 width 타입 정리 후 Float?로 되돌리기.
+     */
+    @SerializedName("width") val width: Any? = null,
     /** 서버 DB의 상품 치수(size). width/length/height는 문자열 또는 빈값으로 내려올 수 있음 */
     @SerializedName("size") val size: ProductSize? = null,
     @SerializedName("type") val type: String = "product"
