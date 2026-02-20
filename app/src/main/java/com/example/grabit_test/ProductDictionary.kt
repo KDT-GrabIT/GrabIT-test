@@ -120,7 +120,7 @@ object ProductDictionary {
 
     /**
      * 물리적 너비(mm) — 원거리 거리/걸음 안내용.
-     * 500ml_pet 65, 250ml_can 53, 355ml_can 65, snack_bag_normal 170,
+     * 500ml_pet 65, 250ml_can 53, 355ml_can 65, pepero 88, snack_bag_normal 170,
      * snack_bag_large 220, snack_box_12pack 250, 기타 100.
      */
     fun getPhysicalWidthMm(label: String): Float {
@@ -140,8 +140,10 @@ object ProductDictionary {
             lower.contains("500ml") || lower.contains("238ml") || lower.contains("600ml") ||
             lower.contains("drink") || lower.contains("tea") || lower.contains("soda") ||
             lower.contains("200ml") || lower.contains("mccol") || lower.contains("17tea") -> 65f
+            // 빼빼로 88mm (8.8cm)
+            lower.contains("pepero") -> 88f
             // snack_bag_normal 170mm (일반 봉지/슬림 포함)
-            lower.contains("pringles") || lower.contains("pepero") || lower.contains("ml").not() -> 170f
+            lower.contains("pringles") || lower.contains("ml").not() -> 170f
             else -> 100f
         }
     }

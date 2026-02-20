@@ -1,7 +1,6 @@
 package com.example.grabitTest
 
 import android.speech.tts.TextToSpeech
-import android.util.Log
 import java.util.PriorityQueue
 
 /**
@@ -10,8 +9,9 @@ import java.util.PriorityQueue
  */
 class TtsPriorityQueue(
     private val tts: TTSManager,
+    /** 큐에서 꺼낸 메시지는 QUEUE_ADD로 재생해 기존 재생을 끊지 않음(삐리삐리 방지). */
     private val onSpeak: (String, (() -> Unit)?) -> Unit = { text, onDone ->
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, onDone)
+        tts.speak(text, TextToSpeech.QUEUE_ADD, onDone)
     }
 ) {
     companion object {
@@ -28,12 +28,17 @@ class TtsPriorityQueue(
 
     private val queue = PriorityQueue<Item>()
     private var isPlaying = false
+    /** 방금 재생한 문구와 큐에 이미 있는 문구는 중복 등록하지 않아 삐리삐리(레이더 소리) 방지 */
+    private var lastSpokenText: String? = null
 
     fun enqueue(text: String, priority: Int = PRIORITY_NORMAL) {
-        if (text.isBlank()) return
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return
         synchronized(queue) {
-            queue.add(Item(priority, text))
-            Log.d(TAG, "TTS 큐 enqueue size=${queue.size} priority=$priority")
+            if (queue.any { it.text == trimmed } || trimmed == lastSpokenText) {
+                return
+            }
+            queue.add(Item(priority, trimmed))
             drainLocked()
         }
     }
@@ -42,10 +47,9 @@ class TtsPriorityQueue(
         if (isPlaying || queue.isEmpty()) return
         val item = queue.poll() ?: return
         isPlaying = true
-        Log.d(TAG, "TTS 큐 재생 시작: ${item.text.take(40)}...")
+        lastSpokenText = item.text
         onSpeak(item.text) {
             isPlaying = false
-            Log.d(TAG, "TTS 큐 재생 종료, 남은 개수=${queue.size}")
             synchronized(queue) {
                 if (queue.isNotEmpty()) drainLocked()
             }
@@ -53,7 +57,10 @@ class TtsPriorityQueue(
     }
 
     fun clear() {
-        synchronized(queue) { queue.clear() }
+        synchronized(queue) {
+            queue.clear()
+            lastSpokenText = null
+        }
     }
 
     fun isBusy(): Boolean = synchronized(queue) { isPlaying || queue.isNotEmpty() }

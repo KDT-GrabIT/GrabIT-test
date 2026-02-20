@@ -12,7 +12,6 @@ import com.example.grabitTest.data.synonym.SynonymRepository
 class VoiceFlowController(
     private val ttsManager: TTSManager,
     private val onStateChanged: (VoiceFlowState, String) -> Unit,
-    private val onSystemAnnounce: (String) -> Unit = {},
     private val onRequestStartStt: () -> Unit,
     private val onStartSearch: (productName: String) -> Unit,
     private val onProductNameEntered: (productName: String) -> Unit = {}
@@ -26,7 +25,7 @@ class VoiceFlowController(
         const val MSG_HELP =
             "홈 화면에서 시작하기 버튼을 누르거나, 볼륨 업 키를 길게 누르면 찾으시는 상품을 말씀해 달라는 안내가 나옵니다.\n\n" +
             "상품 이름을 말하시면 맞는지 확인한 뒤, 예라고 하시거나 확인 버튼을 누르시면 찾기가 시작됩니다. 재입력 버튼으로 상품명을 다시 말할 수 있습니다.\n\n" +
-            "상품을 찾는 동안 방향과 거리 안내가 음성으로 나오고, 상품에 손을 뻗어 닿으시면 상품에 닿았나요라고 물어봅니다. 예라고 하시거나 예 버튼을 누르시면 안내가 종료됩니다.\n\n" +
+            "상품을 찾는 동안 방향과 거리 안내가 음성으로 나옵니다. 상품이 가까이 있으면 손을 뻗어 확인해보세요 안내 후, 손을 뻗어 닿으시면 상품에 닿았나요라고 물어봅니다. 예라고 하시거나 예 버튼을 누르시면 안내가 종료됩니다.\n\n" +
             "찾지 못했을 때는 다시 찾기 버튼으로 다시 시도할 수 있습니다.\n\n" +
             "내 정보의 자주 찾는 상품, 최근 찾은 상품에서 항목을 누르면 해당 상품 찾기가 바로 시작됩니다.\n\n" +
             "도움말이라고 말하시면 이 사용방법을 다시 들으실 수 있습니다."
@@ -36,12 +35,6 @@ class VoiceFlowController(
             "찾으시는 상품이 ${productName} 맞습니까? 맞으면 '예'라고 말해주세요."
 
         fun msgSearching(productName: String) = "상품을 찾고 있습니다. 잠시만 기다려주세요."
-
-        const val MSG_CAMERA_ON = "카메라가 켜졌습니다."
-
-        fun msgSearchResult(productName: String, confidencePercent: Int? = null) =
-            if (confidencePercent != null) "상품을 ${confidencePercent}% 확률로 찾았습니다."
-            else "상품을 찾았습니다."
 
         const val MSG_SEARCH_FAILED =
             "상품을 찾지 못했습니다. 다시 찾으시겠습니까?"
@@ -225,15 +218,7 @@ class VoiceFlowController(
     ) {
         if (success) {
             transitionTo(VoiceFlowState.SEARCH_RESULT)
-            val displayName = if (!detectedClass.isNullOrBlank() && ProductDictionary.isLoaded())
-                ProductDictionary.getDisplayNameKo(detectedClass)
-            else
-                currentProductName
-            val baseMsg = msgSearchResult(displayName, confidencePercent)
-            val guidance = if (boxRect != null && imageWidth > 0 && imageHeight > 0) {
-                buildPositionGuidance(boxRect, imageWidth, imageHeight)
-            } else null
-            speak(if (guidance != null) "$baseMsg $guidance" else baseMsg)
+            // 위치/거리 안내는 HomeFragment transitionToLocked에서 이미 재생함. 중복 제거.
         } else {
             transitionTo(VoiceFlowState.SEARCH_FAILED)
             speak(MSG_SEARCH_FAILED)
@@ -245,9 +230,27 @@ class VoiceFlowController(
         speak(getPositionAnnounceMessage(displayName, boxRect, imageWidth, imageHeight, distMm))
     }
 
-    /** 주기 위치 안내 문장만 생성: "상품이 [구역]에 있습니다. 핸드폰을 [방향]으로 움직여주세요" (화면 9구역). */
+    /** 55cm: 정면에서 이 거리 이하면 "손을 뻗어 확인", 그보다 멀면 "앞으로 걸어가세요" (HomeFragment REACH_DISTANCE_MM와 동일) */
+    private val REACH_DISTANCE_MM = 550f
+
+    /** 주기 위치 안내 문장만 생성: "상품이 [구역]에 있습니다. 핸드폰을 [방향]으로 움직여주세요" (화면 9구역). 정면은 거리별 안내. */
     fun getPositionAnnounceMessage(displayName: String, boxRect: RectF, imageWidth: Int, imageHeight: Int, distMm: Float): String {
-        return buildPositionGuidance(boxRect, imageWidth, imageHeight)
+        val zone = getZoneName(boxRect, imageWidth, imageHeight)
+        return if (zone == "정면") {
+            if (distMm <= REACH_DISTANCE_MM)
+                "상품이 정면에 있습니다. 손을 뻗어 확인해보세요."
+            else
+                getCenterDistanceMessage(distMm)
+        } else {
+            buildPositionGuidance(boxRect, imageWidth, imageHeight)
+        }
+    }
+
+    /** 정면 + 거리: 55cm 이하면 "손 뻗어", 그보다 멀면 "방향 유지한 채 걸어가세요"만 (거리 기준 55cm 단일). */
+    fun getCenterDistanceMessage(distMm: Float): String {
+        if (distMm <= REACH_DISTANCE_MM)
+            return "상품이 정면에 있습니다. 손을 뻗어 확인해보세요."
+        return "상품이 정면에 있습니다. 방향을 유지한 채 앞으로 걸어가세요."
     }
 
     /** 현재 박스가 속한 9구역 이름만 반환 (구역 변경 감지용). */
@@ -394,12 +397,6 @@ class VoiceFlowController(
             VoiceFlowState.SEARCH_FAILED -> "탐색 실패"
         }
         onStateChanged(state, stateLabel)
-    }
-
-    fun announceSystem(message: String) {
-        lastSpokenText = message
-        onSystemAnnounce(message)
-        ttsManager.speak(message)
     }
 
     fun getCurrentProductName(): String = currentProductName

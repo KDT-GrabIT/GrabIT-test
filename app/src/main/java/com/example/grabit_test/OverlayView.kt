@@ -3,7 +3,6 @@ package com.example.grabitTest
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
-import android.util.Log
 import android.view.View
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
@@ -89,10 +88,6 @@ class OverlayView @JvmOverloads constructor(
 
     // YOLOX 결과 설정 (이미지 크기 전달 시 박스를 뷰 좌표로 스케일링)
     fun setDetections(boxes: List<DetectionBox>, srcImageWidth: Int = 0, srcImageHeight: Int = 0) {
-        if (boxes.size == 1) {
-            val r = boxes.first().rect
-            Log.d(TAG_OVERLAY, "setDetections(LOCKED) rect=[${r.left},${r.top},${r.right},${r.bottom}] srcSize=${srcImageWidth}x${srcImageHeight} viewSize=${width}x${height}")
-        }
         detectionBoxes = boxes
         imageWidth = srcImageWidth
         imageHeight = srcImageHeight

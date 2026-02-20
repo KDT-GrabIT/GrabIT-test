@@ -87,7 +87,6 @@ class GyroTrackingManager(
     fun startTracking(rect: RectF, width: Int, height: Int) {
         initialRect.set(rect)
         currentSmoothedRect.set(rect)
-        Log.d(TAG_GYRO, "startTracking rect=[${rect.left},${rect.top},${rect.right},${rect.bottom}] size=${rect.width()}x${rect.height()} imageSize=${width}x${height}")
 
         screenWidth = width.toFloat()
         screenHeight = height.toFloat()
@@ -122,7 +121,6 @@ class GyroTrackingManager(
 
     /** YOLOX 검증 시 시각적 위치로 보정 (드리프트 제거) */
     fun correctPosition(rect: RectF) {
-        Log.d(TAG_GYRO, "correctPosition rect=[${rect.left},${rect.top},${rect.right},${rect.bottom}]")
         initialRect.set(rect)
         currentSmoothedRect.set(rect)
         velocityX = 0f
@@ -222,7 +220,6 @@ class GyroTrackingManager(
         if (timestamp == 0L) {
             initialRotationMatrix = adjustedRotationMatrix.clone()
             timestamp = event.timestamp
-            Log.d(TAG_GYRO, "processRotationVector first event, set initialRotationMatrix only")
             return
         }
 
@@ -262,7 +259,6 @@ class GyroTrackingManager(
         if (elapsedMs < GYRO_WARMUP_MS) {
             val update = BoxUpdate(currentSmoothedRect, -smoothedRollDegrees)
             if (!suspendUpdates) onBoxUpdate(update)
-            if (elapsedMs % 300 < 50) Log.d(TAG_GYRO, "warmup elapsed=${elapsedMs}ms rect=[${currentSmoothedRect.left},${currentSmoothedRect.top}] (no shift)")
             return
         }
 
@@ -275,7 +271,6 @@ class GyroTrackingManager(
             distanceX = 0f
             distanceY = 0f
             lastTimestampAccel = 0L
-            Log.d(TAG_GYRO, "warmup ended: reset rotation reference and translation state")
             return
         }
 
@@ -307,7 +302,6 @@ class GyroTrackingManager(
         if (suspendUpdates) return  // occlusion: optical flow가 박스 위치 담당
         if (isOutOfBounds) {
             outOfBoundsCount++
-            Log.w(TAG_GYRO, "outOfBounds count=$outOfBoundsCount rect=[${currentSmoothedRect.left},${currentSmoothedRect.top},${currentSmoothedRect.right},${currentSmoothedRect.bottom}] screen=${screenWidth}x${screenHeight}")
             if (outOfBoundsCount >= OUT_OF_BOUNDS_FRAMES_TO_LOSE) {
                 stopTracking()
                 onTrackingLost()
