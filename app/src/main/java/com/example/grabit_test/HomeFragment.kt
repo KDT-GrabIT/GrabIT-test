@@ -857,7 +857,7 @@ class HomeFragment : Fragment() {
             isYes -> {
                 requireActivity().runOnUiThread {
                     sttManager?.cancelListening()
-                    touchConfirmInProgress = false
+                    // 리셋 완료 전까지 touchConfirmInProgress 유지 → "예" 직후 손 감지로 enterTouchConfirm() 재호출 방지
                     touchConfirmScheduled = false
                     waitingForTouchConfirm = false
                     touchActive = false
